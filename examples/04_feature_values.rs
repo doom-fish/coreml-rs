@@ -28,10 +28,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap(),
         &[1.0, 2.0]
     );
+
+    let sequence = MLSequence::from_strings(&["cat", "dog"])?;
+    let sequence_feature = Feature::from_sequence(sequence)?;
+    assert_eq!(
+        sequence_feature.sequence_value().unwrap().string_values(),
+        Some(vec!["cat".to_owned(), "dog".to_owned()])
+    );
+
     println!(
-        "feature types: {:?}, {:?}",
+        "feature types: {:?}, {:?}, {:?}",
         int_feature.feature_type(),
-        array_feature.feature_type()
+        array_feature.feature_type(),
+        sequence_feature.feature_type()
     );
     Ok(())
 }

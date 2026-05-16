@@ -75,6 +75,10 @@ fn main() {
         swift_build_dir.clone(),
     ];
 
+    if sdk_at_least(sdk_version, 14, 0) {
+        swift_args.push("-Xswiftc".into());
+        swift_args.push("-DCOREML_HAS_MACOS14_SDK".into());
+    }
     if sdk_at_least(sdk_version, 14, 4) {
         swift_args.push("-Xswiftc".into());
         swift_args.push("-DCOREML_HAS_MACOS14_4_SDK".into());

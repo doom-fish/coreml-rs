@@ -5,6 +5,7 @@ use std::ffi::CString;
 use std::path::Path;
 use std::ptr;
 
+use crate::compute_device::{decode_device_list, ComputeDevice};
 use crate::configuration::ModelConfiguration;
 use crate::error::{from_swift, take_owned_c_string, CoreMLError};
 use crate::feature_provider::{BatchProvider, FeatureProvider};
@@ -12,9 +13,11 @@ use crate::ffi;
 use crate::ml_state::MLState;
 use crate::model_compiler::ModelCompiler;
 pub use crate::model_description::{
-    DictionaryConstraint, FeatureDescription, ImageConstraint, ModelDescription,
-    MultiArrayConstraint, NumericConstraint, ParameterDescription, SequenceConstraint,
-    StateConstraint,
+    DetailedFeatureDescription, DetailedImageConstraint, DetailedModelDescription,
+    DetailedMultiArrayConstraint, DictionaryConstraint, DimensionRange, FeatureDescription,
+    ImageConstraint, ImageSize, ImageSizeConstraint, ImageSizeConstraintType, ModelDescription,
+    MultiArrayConstraint, MultiArrayShapeConstraint, MultiArrayShapeConstraintType,
+    NumericConstraint, ParameterDescription, SequenceConstraint, StateConstraint,
 };
 use crate::prediction::PredictionOptions;
 
@@ -117,6 +120,16 @@ impl Model {
         ModelDescription::from_json_str(&take_owned_c_string(json)).unwrap_or_default()
     }
 
+    /// Snapshot the richer model description, including flexible image and tensor constraints.
+    #[must_use]
+    pub fn detailed_description(&self) -> DetailedModelDescription {
+        let json = unsafe { ffi::cm_model_description_json(self.ptr) };
+        if json.is_null() {
+            return DetailedModelDescription::default();
+        }
+        DetailedModelDescription::from_json_str(&take_owned_c_string(json)).unwrap_or_default()
+    }
+
     /// Run one synchronous prediction with default options.
     ///
     /// # Errors
@@ -197,6 +210,33 @@ impl Model {
         })
     }
 
+    /// Query the compute devices CoreML may use for prediction on this machine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the runtime does not support compute-device discovery.
+    pub fn available_compute_devices() -> Result<Vec<ComputeDevice>, CoreMLError> {
+        let mut error = ptr::null_mut();
+        let mut json = ptr::null_mut();
+        let status = unsafe { ffi::cm_model_available_compute_devices_json(&mut json, &mut error) };
+        decode_device_list(status, json, error)
+    }
+
+    /// Persist a writable model to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the loaded model is not writable or the write fails.
+    pub fn write_to_url(&self, path: impl AsRef<Path>) -> Result<(), CoreMLError> {
+        let path = path_to_c_string(path)?;
+        let mut error = ptr::null_mut();
+        let status = unsafe { ffi::cm_model_write_to_url(self.ptr, path.as_ptr(), &mut error) };
+        if status != ffi::status::OK {
+            return Err(from_swift(status, error));
+        }
+        Ok(())
+    }
+
     /// Create a new CoreML state object for stateful inference.
     ///
     /// # Errors
@@ -272,6 +312,7 @@ impl core::fmt::Debug for Model {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Model")
             .field("description", &self.description())
+            .field("detailed_description", &self.detailed_description())
             .finish()
     }
 }

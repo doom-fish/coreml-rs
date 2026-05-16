@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.1] - 2026-05-16
+
+### Added
+
+- Compute-device discovery via `all_compute_devices()` and `Model::available_compute_devices()`, plus public `ComputeDevice` / `ComputeDeviceKind` snapshots.
+- Rich `ModelStructure` and `ComputePlanDetails` snapshots covering ML Program, neural-network, and pipeline inspection with per-operation cost/device-usage data.
+- Detailed `ModelDescription` flexible image-size and multi-array shape constraints, public `MLKey` / `MLModelError` wrappers, `Model::write_to_url`, and `ModelConfiguration::with_ml_key_parameter`.
+- `MLSequence` wrappers plus `Feature::from_sequence`, `Feature::sequence_value`, and image feature creation from file URLs with crop/crop-and-scale options.
+- `MultiArray::concatenate`, `MultiArray::transfer_to`, and NSNumber-style scalar access helpers.
+- New examples and integration tests covering compute-device discovery, model-structure snapshots, detailed model-description decoding, sequence/image features, and the new multi-array helpers.
+
+### Changed
+
+- The Swift bridge now serializes real CoreML compute-plan/model-structure overlays instead of placeholder compute-plan summaries.
+- `COVERAGE_AUDIT.md` now verifies 90 of 92 public CoreML top-level symbols on macOS (97.8%), leaving only custom layer/model authoring protocols as open gaps.
+
 ## [0.2.0] - 2026-05-16
 
 ### Added

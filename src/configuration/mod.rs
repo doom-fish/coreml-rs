@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{from_swift, take_owned_c_string, CoreMLError};
 use crate::ffi;
+use crate::ml_key::MLKey;
 
 /// CoreML compute-unit selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -173,6 +174,17 @@ impl ModelConfiguration {
         value: impl Into<ParameterValue>,
     ) -> Self {
         self.parameters.insert(key.into(), value.into());
+        self
+    }
+
+    /// Set one model/update parameter using an `MLKey` snapshot.
+    #[must_use]
+    pub fn with_ml_key_parameter(mut self, key: &MLKey, value: impl Into<ParameterValue>) -> Self {
+        let scoped_key = key
+            .scope
+            .as_ref()
+            .map_or_else(|| key.name.clone(), |scope| format!("{}:{scope}", key.name));
+        self.parameters.insert(scoped_key, value.into());
         self
     }
 

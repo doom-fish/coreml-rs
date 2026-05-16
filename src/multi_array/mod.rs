@@ -44,6 +44,43 @@ impl DataType {
     }
 }
 
+/// Dynamically typed scalar used by the NSNumber-style helpers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MultiArrayScalar {
+    /// 64-bit float.
+    Float64(f64),
+    /// 32-bit float.
+    Float32(f32),
+    /// 16-bit float.
+    Float16(f16),
+    /// 32-bit integer.
+    Int32(i32),
+}
+
+impl From<f64> for MultiArrayScalar {
+    fn from(value: f64) -> Self {
+        Self::Float64(value)
+    }
+}
+
+impl From<f32> for MultiArrayScalar {
+    fn from(value: f32) -> Self {
+        Self::Float32(value)
+    }
+}
+
+impl From<f16> for MultiArrayScalar {
+    fn from(value: f16) -> Self {
+        Self::Float16(value)
+    }
+}
+
+impl From<i32> for MultiArrayScalar {
+    fn from(value: i32) -> Self {
+        Self::Int32(value)
+    }
+}
+
 /// Owned wrapper around an `MLMultiArray`.
 pub struct MultiArray {
     pub(crate) ptr: *mut c_void,
@@ -108,6 +145,126 @@ impl MultiArray {
             return Err(from_swift(status, error));
         }
         Ok(Self { ptr: out })
+    }
+
+    /// Concatenate several multi-arrays into a new array.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the input arrays are shape-incompatible or CoreML rejects the request.
+    pub fn concatenate(
+        arrays: &[&Self],
+        axis: isize,
+        data_type: DataType,
+    ) -> Result<Self, CoreMLError> {
+        if arrays.is_empty() {
+            return Err(CoreMLError::InvalidArgument(
+                "at least one MLMultiArray is required for concatenation".to_owned(),
+            ));
+        }
+        let reference_shape = arrays[0].shape();
+        if reference_shape.is_empty() {
+            return Err(CoreMLError::InvalidArgument(
+                "cannot concatenate scalar MLMultiArray values".to_owned(),
+            ));
+        }
+        let axis = Self::normalize_axis(axis, reference_shape.len())?;
+        for array in &arrays[1..] {
+            let shape = array.shape();
+            if shape.len() != reference_shape.len() {
+                return Err(CoreMLError::InvalidArgument(
+                    "all MLMultiArray values must have the same rank for concatenation".to_owned(),
+                ));
+            }
+            for dimension in 0..reference_shape.len() {
+                if dimension != axis && shape[dimension] != reference_shape[dimension] {
+                    return Err(CoreMLError::InvalidArgument(format!(
+                        "all MLMultiArray dimensions except axis {axis} must match"
+                    )));
+                }
+            }
+        }
+
+        let ptrs: Vec<*mut c_void> = arrays.iter().map(|array| array.ptr).collect();
+        let mut error = ptr::null_mut();
+        let mut out = ptr::null_mut();
+        let status = unsafe {
+            ffi::cm_multi_array_concat(
+                ptrs.as_ptr(),
+                ptrs.len(),
+                axis as isize,
+                data_type.as_ffi(),
+                &mut out,
+                &mut error,
+            )
+        };
+        if status != ffi::status::OK || out.is_null() {
+            return Err(from_swift(status, error));
+        }
+        Ok(Self { ptr: out })
+    }
+
+    /// Transfer the contents into another multi-array, allowing data-type or stride changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the runtime is too old or CoreML rejects the destination array.
+    pub fn transfer_to(&self, destination: &mut Self) -> Result<(), CoreMLError> {
+        let mut error = ptr::null_mut();
+        let status =
+            unsafe { ffi::cm_multi_array_transfer_to(self.ptr, destination.ptr, &mut error) };
+        if status != ffi::status::OK {
+            return Err(from_swift(status, error));
+        }
+        Ok(())
+    }
+
+    /// Retrieve one scalar using C-style linear indexing.
+    #[must_use]
+    pub fn number_at_linear_index(&self, index: usize) -> Option<MultiArrayScalar> {
+        let offset = self.linear_index_to_scalar_offset(index)?;
+        Some(self.scalar_at_offset(offset))
+    }
+
+    /// Set one scalar using C-style linear indexing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the index is out of bounds.
+    pub fn set_number_at_linear_index(
+        &mut self,
+        index: usize,
+        value: impl Into<MultiArrayScalar>,
+    ) -> Result<(), CoreMLError> {
+        let offset = self.linear_index_to_scalar_offset(index).ok_or_else(|| {
+            CoreMLError::IndexOutOfRange(
+                "linear index is outside the multi-array bounds".to_owned(),
+            )
+        })?;
+        self.set_scalar_at_offset(offset, value.into())
+    }
+
+    /// Retrieve one scalar using logical indices.
+    #[must_use]
+    pub fn number_at_indices(&self, indices: &[usize]) -> Option<MultiArrayScalar> {
+        let offset = self.scalar_offset(indices)?;
+        Some(self.scalar_at_offset(offset))
+    }
+
+    /// Set one scalar using logical indices.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the indices are out of bounds.
+    pub fn set_number_at_indices(
+        &mut self,
+        indices: &[usize],
+        value: impl Into<MultiArrayScalar>,
+    ) -> Result<(), CoreMLError> {
+        let offset = self.scalar_offset(indices).ok_or_else(|| {
+            CoreMLError::IndexOutOfRange("indices are outside the multi-array shape".to_owned())
+        })?;
+        self.set_scalar_at_offset(offset, value.into())
     }
 
     /// Logical shape of the multi-array.
@@ -403,6 +560,127 @@ impl MultiArray {
             offset = offset.saturating_add(index.saturating_mul(stride));
         }
         Some(offset)
+    }
+
+    fn scalar_at_offset(&self, offset: usize) -> MultiArrayScalar {
+        match self.data_type() {
+            DataType::Float64 => MultiArrayScalar::Float64(
+                self.as_f64_slice()
+                    .and_then(|slice| slice.get(offset).copied())
+                    .unwrap_or_default(),
+            ),
+            DataType::Float32 => MultiArrayScalar::Float32(
+                self.as_f32_slice()
+                    .and_then(|slice| slice.get(offset).copied())
+                    .unwrap_or_default(),
+            ),
+            DataType::Float16 => MultiArrayScalar::Float16(
+                self.as_f16_slice()
+                    .and_then(|slice| slice.get(offset).copied())
+                    .unwrap_or_else(|| f16::from_f32(0.0)),
+            ),
+            DataType::Int32 => MultiArrayScalar::Int32(
+                self.as_i32_slice()
+                    .and_then(|slice| slice.get(offset).copied())
+                    .unwrap_or_default(),
+            ),
+        }
+    }
+
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    fn set_scalar_at_offset(
+        &mut self,
+        offset: usize,
+        value: MultiArrayScalar,
+    ) -> Result<(), CoreMLError> {
+        match self.data_type() {
+            DataType::Float64 => {
+                let slice = self.as_f64_slice_mut().ok_or_else(|| {
+                    CoreMLError::TypeMismatch(
+                        "MLMultiArray is not backed by Float64 storage".to_owned(),
+                    )
+                })?;
+                slice[offset] = match value {
+                    MultiArrayScalar::Float64(value) => value,
+                    MultiArrayScalar::Float32(value) => f64::from(value),
+                    MultiArrayScalar::Float16(value) => f64::from(value.to_f32()),
+                    MultiArrayScalar::Int32(value) => f64::from(value),
+                };
+            }
+            DataType::Float32 => {
+                let slice = self.as_f32_slice_mut().ok_or_else(|| {
+                    CoreMLError::TypeMismatch(
+                        "MLMultiArray is not backed by Float32 storage".to_owned(),
+                    )
+                })?;
+                slice[offset] = match value {
+                    MultiArrayScalar::Float64(value) => value as f32,
+                    MultiArrayScalar::Float32(value) => value,
+                    MultiArrayScalar::Float16(value) => value.to_f32(),
+                    MultiArrayScalar::Int32(value) => value as f32,
+                };
+            }
+            DataType::Float16 => {
+                let slice = self.as_f16_slice_mut().ok_or_else(|| {
+                    CoreMLError::TypeMismatch(
+                        "MLMultiArray is not backed by Float16 storage".to_owned(),
+                    )
+                })?;
+                slice[offset] = match value {
+                    MultiArrayScalar::Float64(value) => f16::from_f32(value as f32),
+                    MultiArrayScalar::Float32(value) => f16::from_f32(value),
+                    MultiArrayScalar::Float16(value) => value,
+                    MultiArrayScalar::Int32(value) => f16::from_f32(value as f32),
+                };
+            }
+            DataType::Int32 => {
+                let slice = self.as_i32_slice_mut().ok_or_else(|| {
+                    CoreMLError::TypeMismatch(
+                        "MLMultiArray is not backed by Int32 storage".to_owned(),
+                    )
+                })?;
+                slice[offset] = match value {
+                    MultiArrayScalar::Float64(value) => value as i32,
+                    MultiArrayScalar::Float32(value) => value as i32,
+                    MultiArrayScalar::Float16(value) => value.to_f32() as i32,
+                    MultiArrayScalar::Int32(value) => value,
+                };
+            }
+        }
+        Ok(())
+    }
+
+    fn linear_index_to_scalar_offset(&self, index: usize) -> Option<usize> {
+        if index >= self.len() {
+            return None;
+        }
+        let shape = self.shape();
+        if shape.is_empty() {
+            return (index == 0).then_some(0);
+        }
+        let mut remaining = index;
+        let mut indices = vec![0_usize; shape.len()];
+        for (position, dimension) in shape.iter().enumerate().rev() {
+            if *dimension == 0 {
+                return None;
+            }
+            indices[position] = remaining % dimension;
+            remaining /= dimension;
+        }
+        self.scalar_offset(&indices)
+    }
+
+    fn normalize_axis(axis: isize, rank: usize) -> Result<usize, CoreMLError> {
+        if rank == 0 {
+            return Err(CoreMLError::InvalidArgument(
+                "cannot select an axis for a rank-0 MLMultiArray".to_owned(),
+            ));
+        }
+        Ok(axis.rem_euclid(rank as isize) as usize)
     }
 
     fn copy_checked<T: Copy>(dst: &mut [T], src: &[T], type_name: &str) -> Result<(), CoreMLError> {

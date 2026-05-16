@@ -3,6 +3,7 @@
 use core::ffi::c_void;
 use std::collections::BTreeMap;
 use std::ffi::CString;
+use std::path::Path;
 use std::ptr;
 
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ use serde_json::Value;
 
 use crate::error::{from_status_message, from_swift, take_owned_c_string, CoreMLError};
 use crate::ffi;
+use crate::ml_sequence::MLSequence;
 use crate::multi_array::MultiArray;
 
 /// Public CoreML feature-value kinds.
@@ -52,7 +54,7 @@ impl FeatureType {
         }
     }
 
-    fn as_ffi(self) -> i32 {
+    pub(crate) const fn as_ffi(self) -> i32 {
         match self {
             Self::Invalid => 0,
             Self::Int64 => 1,
@@ -64,6 +66,59 @@ impl FeatureType {
             Self::Sequence => 7,
             Self::State => 8,
         }
+    }
+}
+
+/// Normalized crop rectangle used with image feature conversion.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ImageCropRect {
+    /// Normalized x origin.
+    pub x: f64,
+    /// Normalized y origin.
+    pub y: f64,
+    /// Normalized width.
+    pub width: f64,
+    /// Normalized height.
+    pub height: f64,
+}
+
+/// Crop-and-scale strategies accepted by CoreML image conversion helpers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageCropAndScale {
+    /// Crop around the center after preserving aspect ratio.
+    CenterCrop,
+    /// Fit the image while preserving aspect ratio.
+    ScaleFit,
+    /// Fill the destination size.
+    ScaleFill,
+    /// Scale-to-fit after a 90° counter-clockwise rotation.
+    ScaleFitRotate90Ccw,
+    /// Scale-to-fill after a 90° counter-clockwise rotation.
+    ScaleFillRotate90Ccw,
+}
+
+/// Optional knobs for `MLFeatureValue` image conversion.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ImageFeatureOptions {
+    /// Optional normalized crop rect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop_rect: Option<ImageCropRect>,
+    /// Optional crop-and-scale strategy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop_and_scale: Option<ImageCropAndScale>,
+}
+
+impl ImageFeatureOptions {
+    fn as_json_c_string(&self) -> Result<CString, CoreMLError> {
+        CString::new(serde_json::to_string(self).map_err(|error| {
+            CoreMLError::InvalidArgument(format!("failed to encode image feature options: {error}"))
+        })?)
+        .map_err(|error| {
+            CoreMLError::InvalidArgument(format!(
+                "image feature options JSON contained an interior NUL byte: {error}"
+            ))
+        })
     }
 }
 
@@ -107,6 +162,65 @@ impl Feature {
         Self::from_direct_ptr(
             unsafe { ffi::cm_feature_new_multi_array(value.as_ptr()) },
             "failed to create MultiArray feature",
+        )
+    }
+
+    /// Create an image feature value from an image on disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path is invalid or CoreML cannot convert the image.
+    pub fn from_image_url(
+        path: impl AsRef<Path>,
+        pixels_wide: usize,
+        pixels_high: usize,
+        pixel_format_type: u32,
+    ) -> Result<Self, CoreMLError> {
+        Self::from_image_url_with_options(
+            path,
+            pixels_wide,
+            pixels_high,
+            pixel_format_type,
+            &ImageFeatureOptions::default(),
+        )
+    }
+
+    /// Create an image feature value from an image on disk with explicit conversion options.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path is invalid or CoreML cannot convert the image.
+    pub fn from_image_url_with_options(
+        path: impl AsRef<Path>,
+        pixels_wide: usize,
+        pixels_high: usize,
+        pixel_format_type: u32,
+        options: &ImageFeatureOptions,
+    ) -> Result<Self, CoreMLError> {
+        let path = path_to_c_string(path)?;
+        let options_json = options.as_json_c_string()?;
+        let mut error = ptr::null_mut();
+        let ptr = unsafe {
+            ffi::cm_feature_new_image_at_url(
+                path.as_ptr(),
+                pixels_wide,
+                pixels_high,
+                pixel_format_type,
+                options_json.as_ptr(),
+                &mut error,
+            )
+        };
+        if ptr.is_null() {
+            return Err(from_swift(ffi::status::FEATURE_PROVIDER_FAILED, error));
+        }
+        Ok(Self { ptr })
+    }
+
+    /// Create a sequence feature value.
+    pub fn from_sequence(value: MLSequence) -> Result<Self, CoreMLError> {
+        Self::from_direct_ptr(
+            unsafe { ffi::cm_feature_new_sequence(value.as_ptr()) },
+            "failed to create Sequence feature",
         )
     }
 
@@ -206,6 +320,13 @@ impl Feature {
         MultiArray::from_raw(ptr)
     }
 
+    /// Retrieve a retained `MLSequence` value when present.
+    #[must_use]
+    pub fn sequence_value(&self) -> Option<MLSequence> {
+        let ptr = unsafe { ffi::cm_feature_get_sequence(self.ptr) };
+        MLSequence::from_raw(ptr)
+    }
+
     /// Retrieve a string-keyed dictionary value when present.
     #[must_use]
     pub fn string_dictionary_value(&self) -> Option<BTreeMap<String, f64>> {
@@ -290,6 +411,9 @@ impl core::fmt::Debug for Feature {
             FeatureType::MultiArray => {
                 debug.field("value", &self.multi_array_value());
             }
+            FeatureType::Sequence => {
+                debug.field("value", &self.sequence_value());
+            }
             _ => {}
         }
         debug.finish()
@@ -321,10 +445,37 @@ impl TryFrom<&Feature> for Value {
                     Ok(Value::Null)
                 }
             }
+            FeatureType::Sequence => {
+                if let Some(sequence) = feature.sequence_value() {
+                    if let Some(strings) = sequence.string_values() {
+                        Ok(serde_json::to_value(strings).map_err(|error| {
+                            CoreMLError::FeatureProviderFailed(format!(
+                                "failed to encode string sequence feature: {error}"
+                            ))
+                        })?)
+                    } else if let Some(ints) = sequence.int64_values() {
+                        Ok(serde_json::to_value(ints).map_err(|error| {
+                            CoreMLError::FeatureProviderFailed(format!(
+                                "failed to encode int64 sequence feature: {error}"
+                            ))
+                        })?)
+                    } else {
+                        Ok(Value::Null)
+                    }
+                } else {
+                    Ok(Value::Null)
+                }
+            }
             _ => Err(CoreMLError::FeatureProviderFailed(format!(
                 "feature type {:?} is not convertible to serde_json::Value",
                 feature.feature_type()
             ))),
         }
     }
+}
+
+fn path_to_c_string(path: impl AsRef<Path>) -> Result<CString, CoreMLError> {
+    CString::new(path.as_ref().to_string_lossy().into_owned()).map_err(|error| {
+        CoreMLError::InvalidArgument(format!("path contains an interior NUL byte: {error}"))
+    })
 }

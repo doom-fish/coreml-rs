@@ -5,31 +5,37 @@
 //! wrappers in the parent modules.
 
 pub mod batch_provider;
+pub mod compute_device;
 pub mod compute_plan;
 pub mod core;
 pub mod feature;
 pub mod ml_array_batch_provider;
 pub mod ml_dictionary_feature_provider;
+pub mod ml_sequence;
 pub mod ml_state;
 pub mod model;
 pub mod model_compiler;
 pub mod model_configuration;
 pub mod model_description;
+pub mod model_structure;
 pub mod multi_array;
 pub mod prediction;
 pub mod update;
 
 pub use batch_provider::*;
+pub use compute_device::*;
 pub use compute_plan::*;
 pub use core::*;
 pub use feature::*;
 pub use ml_array_batch_provider::*;
 pub use ml_dictionary_feature_provider::*;
+pub use ml_sequence::*;
 pub use ml_state::*;
 pub use model::*;
 pub use model_compiler::*;
 pub use model_configuration::*;
 pub use model_description::*;
+pub use model_structure::*;
 pub use multi_array::*;
 pub use prediction::*;
 pub use update::*;

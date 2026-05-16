@@ -14,6 +14,15 @@ extern "C" {
         out_model: *mut *mut c_void,
         error_out: *mut *mut c_char,
     ) -> i32;
+    pub fn cm_model_available_compute_devices_json(
+        out_json: *mut *mut c_char,
+        error_out: *mut *mut c_char,
+    ) -> i32;
+    pub fn cm_model_write_to_url(
+        model: *mut c_void,
+        path: *const c_char,
+        error_out: *mut *mut c_char,
+    ) -> i32;
     pub fn cm_model_predict(
         model: *mut c_void,
         inputs: *mut c_void,
