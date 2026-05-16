@@ -1,17 +1,21 @@
 # coreml
 
-Safe, idiomatic Rust bindings for Apple's [CoreML](https://developer.apple.com/documentation/coreml) framework — load compiled models, inspect model descriptions, and run on-device inference on macOS.
+Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com/documentation/coreml) framework — load models, inspect descriptions, build feature values/providers/batches, request compute-plan summaries, run model updates, and use stateful inference on macOS.
 
 ## Features
 
-- **Compiled model loading** — `Model::load_from_url("MyModel.mlmodelc", ...)`
-- **Runtime compilation** — `Model::compile_model` and `Model::compile_and_load` for `.mlmodel` sources
-- **In-memory loading** — `Model::load_from_specification_data` uses `MLModelAsset` under the hood
-- **Tensor inputs and outputs** — `MultiArray` supports `Float32`, `Float16`, `Int32`, and `Float64`
-- **Dictionary feature providers** — build named model inputs from tensors, strings, integers, doubles, and `CVPixelBuffer`s
-- **Batch prediction** — `BatchProvider` wraps `MLArrayBatchProvider`
-- **Model introspection** — inspect input/output feature descriptions, metadata, and image / tensor constraints
-- **Compute-unit selection** — CPU-only, CPU+GPU, CPU+Neural Engine, or `All`
+- **Model** — load compiled `.mlmodelc` bundles, load in-memory specifications via `MLModelAsset`, and run synchronous prediction APIs.
+- **ModelDescription** — decode rich snapshots covering input/output/state/training features, metadata, and parameter constraints.
+- **Feature** — construct `MLFeatureValue` wrappers for integers, doubles, strings, multi-arrays, undefined values, and string/int keyed dictionaries.
+- **Prediction** — configure `PredictionOptions` and round-trip them through the Swift bridge.
+- **ModelConfiguration** — configure compute units, low-precision GPU accumulation, display/function names, optimization hints, and parameter dictionaries.
+- **ComputePlan** — request `MLComputePlan` summaries for compiled models.
+- **ModelCompiler** — compile source `.mlmodel` files into temporary `.mlmodelc` bundles.
+- **BatchProvider / MLArrayBatchProvider** — build CoreML batches from feature-provider arrays.
+- **Update** — run `MLUpdateTask` workflows synchronously and capture progress/completion contexts.
+- **MLDictionaryFeatureProvider** — build mutable dictionary-backed feature providers.
+- **MLState** — create `MLState` handles, run stateful predictions, and snapshot named state buffers.
+- **MultiArray** — allocate and mutate `MLMultiArray` tensors with `Float32`, `Float16`, `Int32`, and `Float64` storage.
 
 ## Requirements
 
@@ -23,7 +27,7 @@ Safe, idiomatic Rust bindings for Apple's [CoreML](https://developer.apple.com/d
 
 ```toml
 [dependencies]
-coreml = "0.1.0"
+coreml = "0.2.0"
 ```
 
 ## Quick start
@@ -41,29 +45,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut inputs = FeatureProvider::new();
     inputs.insert_multi_array("image", tensor);
 
-    let outputs = model.predict(&inputs)?;
+    let options = PredictionOptions::new().with_uses_cpu_only(false);
+    let outputs = model.predict_with_options(&inputs, &options)?;
     println!("output keys: {:?}", outputs.keys());
     Ok(())
 }
 ```
 
-## Smoke example
+## Examples
+
+The crate ships with 13 headless examples:
+
+- `01_smoke`
+- `02_model_load_missing`
+- `03_model_description_snapshot`
+- `04_feature_values`
+- `05_prediction_options`
+- `06_model_configuration`
+- `07_compute_plan_missing`
+- `08_model_compiler_missing`
+- `09_batch_provider`
+- `10_update_missing`
+- `11_ml_dictionary_feature_provider`
+- `12_ml_array_batch_provider`
+- `13_ml_state_support`
+
+Run one example with:
 
 ```bash
-cargo run --example 01_smoke
+cargo run --example 06_model_configuration
 ```
 
-The smoke example does not require a real model. It verifies:
+## Coverage notes
 
-- `MultiArray` creation, shape/stride access, and round-trip element writes
-- `FeatureProvider` insert / get for tensors, strings, integers, and doubles
-- clean error propagation when loading a nonexistent `.mlmodelc`
+See [COVERAGE.md](COVERAGE.md) for the header audit. The main deferred surfaces in `v0.2.0` are:
 
-## Notes
-
-- Image inputs are exposed via `apple-cf`'s `CVPixelBuffer` wrapper to stay aligned with the rest of the doom-fish macOS stack.
-- `MLUpdateTask`, `MLComputePlan`, and macOS 15 stateful inference APIs are intentionally deferred to a future release.
-- `preferredMetalDevice` and typed `MLParameterKey` dictionaries are not yet surfaced in the safe Rust API.
+- Detailed `MLComputePlanCost` / `MLComputePlanDeviceUsage` objects and the full `MLModelStructure*` graph.
+- Compute-device discovery APIs (`MLAllComputeDevices`, `MLCPUComputeDevice`, `MLGPUComputeDevice`, `MLNeuralEngineComputeDevice`).
+- Safe wrappers for `MLSequence` values and `MLFeatureValue+MLImageConversion` helpers.
+- Remote model-collection management (`MLModelCollection*`) and custom model/layer authoring APIs.
 
 ## License
 

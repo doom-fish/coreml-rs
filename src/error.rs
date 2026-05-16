@@ -15,6 +15,8 @@ pub enum CoreMLError {
     InvalidArgument(String),
     /// Loading a compiled model failed.
     ModelLoadFailed(String),
+    /// Reading or decoding a model description failed.
+    DescriptionFailed(String),
     /// Running inference failed.
     PredictionFailed(String),
     /// Compiling a `.mlmodel` into `.mlmodelc` failed.
@@ -25,6 +27,12 @@ pub enum CoreMLError {
     MultiArrayFailed(String),
     /// Creating or loading an `MLModelAsset` from in-memory bytes failed.
     ModelAssetFailed(String),
+    /// Constructing or querying an `MLComputePlan` failed.
+    ComputePlanFailed(String),
+    /// Running an `MLUpdateTask` failed.
+    UpdateFailed(String),
+    /// Creating or querying an `MLState` failed.
+    StateFailed(String),
     /// The requested operation is unsupported on this system.
     Unsupported(String),
     /// An async CoreML bridge operation timed out.
@@ -44,11 +52,15 @@ impl CoreMLError {
         match self {
             Self::InvalidArgument(_) => ffi::status::INVALID_ARGUMENT,
             Self::ModelLoadFailed(_) => ffi::status::MODEL_LOAD_FAILED,
+            Self::DescriptionFailed(_) => ffi::status::DESCRIPTION_FAILED,
             Self::PredictionFailed(_) => ffi::status::PREDICTION_FAILED,
             Self::CompilationFailed(_) => ffi::status::COMPILATION_FAILED,
             Self::FeatureProviderFailed(_) => ffi::status::FEATURE_PROVIDER_FAILED,
             Self::MultiArrayFailed(_) | Self::TypeMismatch(_) => ffi::status::MULTI_ARRAY_FAILED,
             Self::ModelAssetFailed(_) => ffi::status::MODEL_ASSET_FAILED,
+            Self::ComputePlanFailed(_) => ffi::status::COMPUTE_PLAN_FAILED,
+            Self::UpdateFailed(_) => ffi::status::UPDATE_FAILED,
+            Self::StateFailed(_) => ffi::status::STATE_FAILED,
             Self::Unsupported(_) => ffi::status::UNSUPPORTED,
             Self::TimedOut(_) => ffi::status::TIMED_OUT,
             Self::IndexOutOfRange(_) => ffi::status::INDEX_OUT_OF_RANGE,
@@ -62,11 +74,15 @@ impl CoreMLError {
         match self {
             Self::InvalidArgument(message)
             | Self::ModelLoadFailed(message)
+            | Self::DescriptionFailed(message)
             | Self::PredictionFailed(message)
             | Self::CompilationFailed(message)
             | Self::FeatureProviderFailed(message)
             | Self::MultiArrayFailed(message)
             | Self::ModelAssetFailed(message)
+            | Self::ComputePlanFailed(message)
+            | Self::UpdateFailed(message)
+            | Self::StateFailed(message)
             | Self::Unsupported(message)
             | Self::TimedOut(message)
             | Self::IndexOutOfRange(message)
@@ -108,11 +124,15 @@ pub(crate) fn from_status_message(status: i32, message: String) -> CoreMLError {
     match status {
         ffi::status::INVALID_ARGUMENT => CoreMLError::InvalidArgument(message),
         ffi::status::MODEL_LOAD_FAILED => CoreMLError::ModelLoadFailed(message),
+        ffi::status::DESCRIPTION_FAILED => CoreMLError::DescriptionFailed(message),
         ffi::status::PREDICTION_FAILED => CoreMLError::PredictionFailed(message),
         ffi::status::COMPILATION_FAILED => CoreMLError::CompilationFailed(message),
         ffi::status::FEATURE_PROVIDER_FAILED => CoreMLError::FeatureProviderFailed(message),
         ffi::status::MULTI_ARRAY_FAILED => CoreMLError::MultiArrayFailed(message),
         ffi::status::MODEL_ASSET_FAILED => CoreMLError::ModelAssetFailed(message),
+        ffi::status::COMPUTE_PLAN_FAILED => CoreMLError::ComputePlanFailed(message),
+        ffi::status::UPDATE_FAILED => CoreMLError::UpdateFailed(message),
+        ffi::status::STATE_FAILED => CoreMLError::StateFailed(message),
         ffi::status::UNSUPPORTED => CoreMLError::Unsupported(message),
         ffi::status::TIMED_OUT => CoreMLError::TimedOut(message),
         ffi::status::INDEX_OUT_OF_RANGE => CoreMLError::IndexOutOfRange(message),

@@ -113,7 +113,10 @@ impl MultiArray {
     /// Logical shape of the multi-array.
     #[must_use]
     pub fn shape(&self) -> Vec<usize> {
-        self.copy_i64_vector(unsafe { ffi::cm_multi_array_rank(self.ptr) }, ffi::cm_multi_array_copy_shape)
+        self.copy_i64_vector(
+            unsafe { ffi::cm_multi_array_rank(self.ptr) },
+            ffi::cm_multi_array_copy_shape,
+        )
     }
 
     /// Raw strides reported by CoreML.
@@ -268,7 +271,8 @@ impl MultiArray {
     #[must_use]
     pub fn get_f32(&self, indices: &[usize]) -> Option<f32> {
         let offset = self.scalar_offset(indices)?;
-        self.as_f32_slice().and_then(|slice| slice.get(offset).copied())
+        self.as_f32_slice()
+            .and_then(|slice| slice.get(offset).copied())
     }
 
     /// Write one `Float32` element using logical indices.
@@ -291,7 +295,8 @@ impl MultiArray {
     #[must_use]
     pub fn get_f16(&self, indices: &[usize]) -> Option<f16> {
         let offset = self.scalar_offset(indices)?;
-        self.as_f16_slice().and_then(|slice| slice.get(offset).copied())
+        self.as_f16_slice()
+            .and_then(|slice| slice.get(offset).copied())
     }
 
     /// Write one `Float16` element using logical indices.
@@ -314,7 +319,8 @@ impl MultiArray {
     #[must_use]
     pub fn get_i32(&self, indices: &[usize]) -> Option<i32> {
         let offset = self.scalar_offset(indices)?;
-        self.as_i32_slice().and_then(|slice| slice.get(offset).copied())
+        self.as_i32_slice()
+            .and_then(|slice| slice.get(offset).copied())
     }
 
     /// Write one `Int32` element using logical indices.
@@ -337,7 +343,8 @@ impl MultiArray {
     #[must_use]
     pub fn get_f64(&self, indices: &[usize]) -> Option<f64> {
         let offset = self.scalar_offset(indices)?;
-        self.as_f64_slice().and_then(|slice| slice.get(offset).copied())
+        self.as_f64_slice()
+            .and_then(|slice| slice.get(offset).copied())
     }
 
     /// Write one `Float64` element using logical indices.

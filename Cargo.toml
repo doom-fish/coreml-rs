@@ -1,11 +1,11 @@
 [package]
 name = "coreml"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/doom-fish/coreml-rs"
 repository = "https://github.com/doom-fish/coreml-rs"
-description = "Safe Rust bindings for Apple CoreML — on-device ML model loading and inference on macOS"
+description = "Safe Rust bindings for Apple CoreML — models, features, updates, compute plans, and stateful inference on macOS"
 authors = ["Per Johansson <per@doom.fish>"]
 keywords = ["coreml", "ml", "macos", "neural-engine", "inference"]
 categories = ["api-bindings", "os::macos-apis"]

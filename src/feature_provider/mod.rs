@@ -4,52 +4,11 @@ use core::ffi::c_void;
 use std::ffi::CString;
 
 use apple_cf::cv::CVPixelBuffer;
-use serde::{Deserialize, Serialize};
 
 use crate::error::{from_status_message, take_owned_c_string, CoreMLError};
+use crate::feature::{Feature, FeatureType};
 use crate::ffi;
 use crate::multi_array::MultiArray;
-
-/// Public CoreML feature-value kinds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FeatureType {
-    /// Invalid or unknown feature type.
-    Invalid,
-    /// Signed 64-bit integer feature.
-    Int64,
-    /// Double-precision floating-point feature.
-    Double,
-    /// UTF-8 string feature.
-    String,
-    /// Image / `CVPixelBuffer` feature.
-    Image,
-    /// `MLMultiArray` feature.
-    MultiArray,
-    /// Dictionary-valued feature.
-    Dictionary,
-    /// Sequence feature.
-    Sequence,
-    /// Stateful model feature.
-    State,
-}
-
-impl FeatureType {
-    pub(crate) fn from_ffi(raw: i32) -> Option<Self> {
-        match raw {
-            0 => Some(Self::Invalid),
-            1 => Some(Self::Int64),
-            2 => Some(Self::Double),
-            3 => Some(Self::String),
-            4 => Some(Self::Image),
-            5 => Some(Self::MultiArray),
-            6 => Some(Self::Dictionary),
-            7 => Some(Self::Sequence),
-            8 => Some(Self::State),
-            _ => None,
-        }
-    }
-}
 
 /// Mutable dictionary-style model input / output bag.
 pub struct FeatureProvider {
@@ -63,6 +22,12 @@ impl FeatureProvider {
         let ptr = unsafe { ffi::cm_feature_provider_new() };
         assert!(!ptr.is_null(), "CoreML feature-provider allocation failed");
         Self { ptr }
+    }
+
+    /// Insert a generic feature value.
+    pub fn insert_feature(&mut self, name: &str, value: &Feature) {
+        self.try_insert_feature(name, value)
+            .expect("failed to insert feature into feature provider");
     }
 
     /// Insert an `MLMultiArray` value.
@@ -93,6 +58,19 @@ impl FeatureProvider {
     pub fn insert_double(&mut self, name: &str, value: f64) {
         self.try_insert_double(name, value)
             .expect("failed to insert double into feature provider");
+    }
+
+    /// Fallible variant of [`insert_feature`](Self::insert_feature).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the feature name cannot cross the FFI boundary.
+    pub fn try_insert_feature(&mut self, name: &str, value: &Feature) -> Result<(), CoreMLError> {
+        let name = c_string(name, "feature name")?;
+        let status = unsafe {
+            ffi::cm_feature_provider_insert_feature(self.ptr, name.as_ptr(), value.as_ptr())
+        };
+        status_ok(status, "failed to insert feature")
     }
 
     /// Fallible variant of [`insert_multi_array`](Self::insert_multi_array).
@@ -154,7 +132,8 @@ impl FeatureProvider {
     /// Returns an error when the feature name contains a NUL byte.
     pub fn try_insert_int64(&mut self, name: &str, value: i64) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
-        let status = unsafe { ffi::cm_feature_provider_insert_int64(self.ptr, name.as_ptr(), value) };
+        let status =
+            unsafe { ffi::cm_feature_provider_insert_int64(self.ptr, name.as_ptr(), value) };
         status_ok(status, "failed to insert int64")
     }
 
@@ -165,7 +144,8 @@ impl FeatureProvider {
     /// Returns an error when the feature name contains a NUL byte.
     pub fn try_insert_double(&mut self, name: &str, value: f64) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
-        let status = unsafe { ffi::cm_feature_provider_insert_double(self.ptr, name.as_ptr(), value) };
+        let status =
+            unsafe { ffi::cm_feature_provider_insert_double(self.ptr, name.as_ptr(), value) };
         status_ok(status, "failed to insert double")
     }
 
@@ -175,6 +155,14 @@ impl FeatureProvider {
         let name = CString::new(name).ok()?;
         let raw = unsafe { ffi::cm_feature_provider_feature_type(self.ptr, name.as_ptr()) };
         FeatureType::from_ffi(raw)
+    }
+
+    /// Fetch a retained `Feature` value.
+    #[must_use]
+    pub fn get_feature(&self, name: &str) -> Option<Feature> {
+        let name = CString::new(name).ok()?;
+        let ptr = unsafe { ffi::cm_feature_provider_get_feature(self.ptr, name.as_ptr()) };
+        Feature::from_raw(ptr)
     }
 
     /// Fetch a retained `MLMultiArray` value.
@@ -245,7 +233,7 @@ impl core::fmt::Debug for FeatureProvider {
     }
 }
 
-/// Owned wrapper around `MLArrayBatchProvider`.
+/// Owned wrapper around `MLArrayBatchProvider` / `MLBatchProvider`.
 pub struct BatchProvider {
     pub(crate) ptr: *mut c_void,
 }
@@ -257,6 +245,16 @@ impl BatchProvider {
         let ptr = unsafe { ffi::cm_batch_provider_new() };
         assert!(!ptr.is_null(), "CoreML batch-provider allocation failed");
         Self { ptr }
+    }
+
+    /// Create a batch from an iterator of feature providers.
+    #[must_use]
+    pub fn from_feature_providers(providers: impl IntoIterator<Item = FeatureProvider>) -> Self {
+        let mut batch = Self::new();
+        for provider in providers {
+            batch.push(provider);
+        }
+        batch
     }
 
     /// Append one feature provider to the batch.

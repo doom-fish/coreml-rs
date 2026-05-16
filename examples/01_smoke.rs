@@ -9,7 +9,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(array.get_f32(&[1, 2]), Some(6.0));
 
     array.set_f32(&[0, 1], 9.0)?;
-    assert_eq!(array.as_f32_slice().unwrap(), &[1.0, 9.0, 3.0, 4.0, 5.0, 6.0]);
+    assert_eq!(
+        array.as_f32_slice().unwrap(),
+        &[1.0, 9.0, 3.0, 4.0, 5.0, 6.0]
+    );
 
     let expected_tensor = array.as_f32_slice().unwrap().to_vec();
 
@@ -32,9 +35,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(inputs.get_int64("count"), Some(42));
     assert_eq!(inputs.get_double("score"), Some(0.5));
 
-    let round_trip = inputs.get_multi_array("tensor").expect("tensor should exist");
+    let round_trip = inputs
+        .get_multi_array("tensor")
+        .expect("tensor should exist");
     assert_eq!(round_trip.shape(), vec![2, 3]);
-    assert_eq!(round_trip.as_f32_slice().unwrap(), expected_tensor.as_slice());
+    assert_eq!(
+        round_trip.as_f32_slice().unwrap(),
+        expected_tensor.as_slice()
+    );
 
     let configuration = ModelConfiguration::new()
         .with_compute_units(ComputeUnits::CpuOnly)
