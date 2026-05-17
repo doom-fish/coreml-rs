@@ -1,6 +1,6 @@
 # CoreML.framework coverage audit
 
-Crate: `coreml` 0.2.0  
+Crate: `coreml` 0.2.2  
 Framework: `CoreML.framework`  
 Headers audited from: `$(xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks/CoreML.framework/Headers`
 
@@ -34,5 +34,5 @@ Legend:
 | `MLSequence.h`, `MLSequenceConstraint.h` | 🟡 partial | Sequence constraint metadata is surfaced through `ModelDescription`, but safe `MLSequence` value wrappers are not yet implemented. |
 | `MLFeatureValue+MLImageConversion.h` | ⏭️ skipped | Image-conversion helper category is out of scope until the crate grows image wrapper types beyond raw `CVPixelBuffer` insertion. |
 | `MLModelCollection.h`, `MLModelCollectionEntry.h` | ⏭️ skipped | Remote model-collection management is not yet surfaced in the crate. |
-| `MLCustomLayer.h`, `MLCustomModel.h` | ⏭️ skipped | Custom model/layer authoring callbacks are not mapped through the Swift bridge yet. |
+| `MLCustomLayer.h`, `MLCustomModel.h` | ✅ | `MLCustomLayerRegistration` / `MLCustomModelRegistration` expose Rust callback authoring, dynamic Objective-C class registration, and headless callback exercise helpers backed by `CustomLayer.swift` / `CustomModel.swift`. |
 | `MLWritable.h` | 🟡 partial | Update tasks surface writable models indirectly via captured contexts; direct `writeToURL` wrappers are deferred. |

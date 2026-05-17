@@ -17,6 +17,8 @@ public let CM_DESCRIPTION_FAILED: Int32 = -11
 public let CM_COMPUTE_PLAN_FAILED: Int32 = -12
 public let CM_UPDATE_FAILED: Int32 = -13
 public let CM_STATE_FAILED: Int32 = -14
+public let CM_CUSTOM_LAYER_FAILED: Int32 = -15
+public let CM_CUSTOM_MODEL_FAILED: Int32 = -16
 public let CM_UNKNOWN: Int32 = -99
 
 enum CMBridgeError: LocalizedError {

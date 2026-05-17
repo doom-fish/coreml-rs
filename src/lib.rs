@@ -28,6 +28,8 @@ pub mod feature;
 pub mod feature_provider;
 pub mod ffi;
 pub mod ml_array_batch_provider;
+pub mod ml_custom_layer;
+pub mod ml_custom_model;
 pub mod ml_dictionary_feature_provider;
 pub mod ml_key;
 pub mod ml_sequence;
@@ -55,6 +57,8 @@ pub use error::CoreMLError;
 pub use feature::{Feature, FeatureType, ImageCropAndScale, ImageCropRect, ImageFeatureOptions};
 pub use feature_provider::{BatchProvider, FeatureProvider};
 pub use ml_array_batch_provider::MLArrayBatchProvider;
+pub use ml_custom_layer::{MLCustomLayer, MLCustomLayerHandle, MLCustomLayerInitContext, MLCustomLayerRegistration};
+pub use ml_custom_model::{MLCustomModel, MLCustomModelHandle, MLCustomModelInitContext, MLCustomModelRegistration};
 pub use ml_dictionary_feature_provider::MLDictionaryFeatureProvider;
 pub use ml_key::MLKey;
 pub use ml_sequence::MLSequence;
@@ -99,6 +103,14 @@ pub mod prelude {
     };
     pub use crate::feature_provider::{BatchProvider, FeatureProvider};
     pub use crate::ml_array_batch_provider::MLArrayBatchProvider;
+    pub use crate::ml_custom_layer::{
+        MLCustomLayer, MLCustomLayerHandle, MLCustomLayerInitContext,
+        MLCustomLayerRegistration,
+    };
+    pub use crate::ml_custom_model::{
+        MLCustomModel, MLCustomModelHandle, MLCustomModelInitContext,
+        MLCustomModelRegistration,
+    };
     pub use crate::ml_dictionary_feature_provider::MLDictionaryFeatureProvider;
     pub use crate::ml_key::MLKey;
     pub use crate::ml_sequence::MLSequence;

@@ -10,6 +10,8 @@ pub mod compute_plan;
 pub mod core;
 pub mod feature;
 pub mod ml_array_batch_provider;
+pub mod ml_custom_layer;
+pub mod ml_custom_model;
 pub mod ml_dictionary_feature_provider;
 pub mod ml_sequence;
 pub mod ml_state;
@@ -28,6 +30,8 @@ pub use compute_plan::*;
 pub use core::*;
 pub use feature::*;
 pub use ml_array_batch_provider::*;
+pub use ml_custom_layer::*;
+pub use ml_custom_model::*;
 pub use ml_dictionary_feature_provider::*;
 pub use ml_sequence::*;
 pub use ml_state::*;
@@ -56,5 +60,7 @@ pub mod status {
     pub const COMPUTE_PLAN_FAILED: i32 = -12;
     pub const UPDATE_FAILED: i32 = -13;
     pub const STATE_FAILED: i32 = -14;
+    pub const CUSTOM_LAYER_FAILED: i32 = -15;
+    pub const CUSTOM_MODEL_FAILED: i32 = -16;
     pub const UNKNOWN: i32 = -99;
 }

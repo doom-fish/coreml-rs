@@ -1,10 +1,10 @@
 # coreml coverage audit (vs MacOSX26.2.sdk)
 
 SDK_PUBLIC_SYMBOLS: 92
-VERIFIED: 90
-GAPS: 2
+VERIFIED: 92
+GAPS: 0
 EXEMPT: 0
-COVERAGE_PCT: 97.8%
+COVERAGE_PCT: 100.0%
 
 This audit counts top-level Objective-C CoreML symbols (interfaces, protocols, enums, exported constants, and top-level C functions), not every individual method/property. Stringly-typed/raw-JSON access counts as **VERIFIED** when the crate’s public API can still reach the underlying framework surface (for example metadata keys, parameter keys, and metric keys).
 
@@ -109,12 +109,13 @@ This audit counts top-level Objective-C CoreML symbols (interfaces, protocols, e
 | MLNeuralEngineComputeDevice | interface | MLNeuralEngineComputeDevice.h | `ComputeDevice` / `ComputeDeviceKind::NeuralEngine` in `src/compute_device.rs`. |
 | MLSequence | interface | MLSequence.h | `MLSequence` in `src/ml_sequence.rs`, plus `Feature::from_sequence` / `Feature::sequence_value` in `src/feature.rs`. |
 | MLWritable | protocol | MLWritable.h | `Model::write_to_url` in `src/model/mod.rs`; bridged by `cm_model_write_to_url` in `swift-bridge/Sources/CoreMLBridge/Model.swift`. |
+| MLCustomLayer | protocol | MLCustomLayer.h | `MLCustomLayerRegistration` / `MLCustomLayer` in `src/ml_custom_layer.rs`; backed by dynamic Objective-C registration and Rust callback shims in `swift-bridge/Sources/CoreMLBridge/CustomLayer.swift`. |
+| MLCustomModel | protocol | MLCustomModel.h | `MLCustomModelRegistration` / `MLCustomModel` in `src/ml_custom_model.rs`; backed by dynamic Objective-C registration and Rust callback shims in `swift-bridge/Sources/CoreMLBridge/CustomModel.swift`. |
 
 ## 🔴 GAPS
 | Symbol | Kind | Header | Notes |
 | --- | --- | --- | --- |
-| MLCustomLayer | protocol | MLCustomLayer.h | Custom layer authoring callbacks are not bridged. |
-| MLCustomModel | protocol | MLCustomModel.h | Custom model authoring callbacks are not bridged. |
+| _(none)_ | - | - | All 92 audited public macOS CoreML symbols are now verified. |
 
 ## ⏭️ EXEMPT
 | Symbol | Kind | Header | Reason | SDK attribute |

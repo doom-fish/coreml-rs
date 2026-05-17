@@ -1,6 +1,6 @@
 # coreml
 
-Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com/documentation/coreml) framework — load models, inspect descriptions, build feature values/providers/batches, request compute-plan summaries, run model updates, and use stateful inference on macOS.
+Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com/documentation/coreml) framework — load models, inspect descriptions, build feature values/providers/batches, register Rust-backed custom layers/models, request compute-plan summaries, run model updates, and use stateful inference on macOS.
 
 ## Features
 
@@ -15,6 +15,7 @@ Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com
 - **Update** — run `MLUpdateTask` workflows synchronously and capture progress/completion contexts.
 - **MLDictionaryFeatureProvider** — build mutable dictionary-backed feature providers.
 - **MLState** — create `MLState` handles, run stateful predictions, and snapshot named state buffers.
+- **MLCustomLayer / MLCustomModel** — register Rust callback implementations as Objective-C CoreML custom layers/models and exercise them in headless tests/examples.
 - **MultiArray** — allocate and mutate `MLMultiArray` tensors with `Float32`, `Float16`, `Int32`, and `Float64` storage.
 
 ## Requirements
@@ -27,7 +28,7 @@ Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com
 
 ```toml
 [dependencies]
-coreml = "0.2.0"
+coreml = "0.2.2"
 ```
 
 ## Quick start
@@ -54,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Examples
 
-The crate ships with 13 headless examples:
+The crate ships with 17 headless examples:
 
 - `01_smoke`
 - `02_model_load_missing`
@@ -69,6 +70,10 @@ The crate ships with 13 headless examples:
 - `11_ml_dictionary_feature_provider`
 - `12_ml_array_batch_provider`
 - `13_ml_state_support`
+- `14_compute_devices`
+- `15_model_structure_snapshot`
+- `16_ml_custom_layer`
+- `17_ml_custom_model`
 
 Run one example with:
 
@@ -78,12 +83,7 @@ cargo run --example 06_model_configuration
 
 ## Coverage notes
 
-See [COVERAGE.md](COVERAGE.md) for the header audit. The main deferred surfaces in `v0.2.0` are:
-
-- Detailed `MLComputePlanCost` / `MLComputePlanDeviceUsage` objects and the full `MLModelStructure*` graph.
-- Compute-device discovery APIs (`MLAllComputeDevices`, `MLCPUComputeDevice`, `MLGPUComputeDevice`, `MLNeuralEngineComputeDevice`).
-- Safe wrappers for `MLSequence` values and `MLFeatureValue+MLImageConversion` helpers.
-- Remote model-collection management (`MLModelCollection*`) and custom model/layer authoring APIs.
+See [COVERAGE.md](COVERAGE.md) and [COVERAGE_AUDIT.md](COVERAGE_AUDIT.md) for the SDK audit. `coreml` 0.2.2 now covers all 92 audited public macOS CoreML top-level symbols, including Rust-backed `MLCustomLayer` and `MLCustomModel` authoring callbacks.
 
 ## License
 

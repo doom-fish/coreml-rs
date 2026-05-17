@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2] - 2026-05-17
+
+### Added
+
+- `MLCustomLayerRegistration` / `MLCustomModelRegistration` plus Rust callback traits for bridging CoreML custom layer/model authoring through dynamically registered Objective-C classes.
+- Headless examples and integration tests covering custom-layer weight/shape/CPU-evaluation callbacks and custom-model single/batch prediction callbacks.
+
+### Changed
+
+- The Swift bridge now links Metal so `MLCustomLayer` registrations can optionally surface GPU command-buffer encoding hooks.
+- `COVERAGE.md` and `COVERAGE_AUDIT.md` now report 92/92 verified public CoreML macOS symbols (100%).
+
 ## [0.2.1] - 2026-05-16
 
 ### Added

@@ -33,6 +33,10 @@ pub enum CoreMLError {
     UpdateFailed(String),
     /// Creating or querying an `MLState` failed.
     StateFailed(String),
+    /// Invoking a registered `MLCustomLayer` failed.
+    CustomLayerFailed(String),
+    /// Invoking a registered `MLCustomModel` failed.
+    CustomModelFailed(String),
     /// The requested operation is unsupported on this system.
     Unsupported(String),
     /// An async CoreML bridge operation timed out.
@@ -61,6 +65,8 @@ impl CoreMLError {
             Self::ComputePlanFailed(_) => ffi::status::COMPUTE_PLAN_FAILED,
             Self::UpdateFailed(_) => ffi::status::UPDATE_FAILED,
             Self::StateFailed(_) => ffi::status::STATE_FAILED,
+            Self::CustomLayerFailed(_) => ffi::status::CUSTOM_LAYER_FAILED,
+            Self::CustomModelFailed(_) => ffi::status::CUSTOM_MODEL_FAILED,
             Self::Unsupported(_) => ffi::status::UNSUPPORTED,
             Self::TimedOut(_) => ffi::status::TIMED_OUT,
             Self::IndexOutOfRange(_) => ffi::status::INDEX_OUT_OF_RANGE,
@@ -83,6 +89,8 @@ impl CoreMLError {
             | Self::ComputePlanFailed(message)
             | Self::UpdateFailed(message)
             | Self::StateFailed(message)
+            | Self::CustomLayerFailed(message)
+            | Self::CustomModelFailed(message)
             | Self::Unsupported(message)
             | Self::TimedOut(message)
             | Self::IndexOutOfRange(message)
@@ -133,6 +141,8 @@ pub(crate) fn from_status_message(status: i32, message: String) -> CoreMLError {
         ffi::status::COMPUTE_PLAN_FAILED => CoreMLError::ComputePlanFailed(message),
         ffi::status::UPDATE_FAILED => CoreMLError::UpdateFailed(message),
         ffi::status::STATE_FAILED => CoreMLError::StateFailed(message),
+        ffi::status::CUSTOM_LAYER_FAILED => CoreMLError::CustomLayerFailed(message),
+        ffi::status::CUSTOM_MODEL_FAILED => CoreMLError::CustomModelFailed(message),
         ffi::status::UNSUPPORTED => CoreMLError::Unsupported(message),
         ffi::status::TIMED_OUT => CoreMLError::TimedOut(message),
         ffi::status::INDEX_OUT_OF_RANGE => CoreMLError::IndexOutOfRange(message),
