@@ -90,7 +90,10 @@ fn custom_layer_registration_round_trips_cpu_callbacks() {
         .expect("input tensor should fill");
     let mut output = MultiArray::new_f32(&[3]).expect("output tensor should allocate");
     layer
-        .evaluate_on_cpu(std::slice::from_ref(&input), std::slice::from_mut(&mut output))
+        .evaluate_on_cpu(
+            std::slice::from_ref(&input),
+            std::slice::from_mut(&mut output),
+        )
         .expect("custom layer should run on CPU");
 
     assert_eq!(output.as_f32_slice(), Some(&[3.5, 5.5, -0.5][..]));

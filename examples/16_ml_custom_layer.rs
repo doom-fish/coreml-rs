@@ -24,6 +24,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         MLCustomLayerRegistration::register("RustExampleScaleAndBiasLayer", |_context| {
             Ok(ScaleAndBiasLayer)
         })?;
-    println!("registered custom layer class: {}", registration.class_name());
+    println!(
+        "registered custom layer class: {}",
+        registration.class_name()
+    );
     Ok(())
 }

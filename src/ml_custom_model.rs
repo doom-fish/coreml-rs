@@ -99,7 +99,8 @@ impl MLCustomModelRegistration {
         });
 
         let mut error = ptr::null_mut();
-        let status = unsafe { ffi::cm_custom_model_register_class(class_name_c.as_ptr(), &mut error) };
+        let status =
+            unsafe { ffi::cm_custom_model_register_class(class_name_c.as_ptr(), &mut error) };
         if status != ffi::status::OK {
             return Err(from_swift(status, error));
         }
@@ -385,7 +386,9 @@ fn lookup_factory(class_name: &str) -> Result<Arc<ModelFactory>, CoreMLError> {
         })
 }
 
-unsafe fn model_from_ptr<'a>(context: *mut c_void) -> Result<&'a mut ModelInstanceBox, CoreMLError> {
+unsafe fn model_from_ptr<'a>(
+    context: *mut c_void,
+) -> Result<&'a mut ModelInstanceBox, CoreMLError> {
     if context.is_null() {
         return Err(CoreMLError::InvalidArgument(
             "custom-model callback received a null instance pointer".to_owned(),
@@ -400,23 +403,26 @@ fn c_string(value: &str, label: &str) -> Result<CString, CoreMLError> {
     })
 }
 
-fn json_c_string<T: ?Sized + Serialize>(
-    value: &T,
-    label: &str,
-) -> Result<CString, CoreMLError> {
+fn json_c_string<T: ?Sized + Serialize>(value: &T, label: &str) -> Result<CString, CoreMLError> {
     CString::new(serde_json::to_string(value).map_err(|error| {
         CoreMLError::CustomModelFailed(format!("failed to encode {label} as JSON: {error}"))
     })?)
     .map_err(|error| {
-        CoreMLError::InvalidArgument(format!("{label} JSON contained an interior NUL byte: {error}"))
+        CoreMLError::InvalidArgument(format!(
+            "{label} JSON contained an interior NUL byte: {error}"
+        ))
     })
 }
 
 fn required_string(ptr: *const c_char, label: &str) -> Result<String, CoreMLError> {
     if ptr.is_null() {
-        return Err(CoreMLError::InvalidArgument(format!("{label} must not be null")));
+        return Err(CoreMLError::InvalidArgument(format!(
+            "{label} must not be null"
+        )));
     }
-    Ok(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+    Ok(unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned())
 }
 
 fn parse_json<T>(ptr: *const c_char) -> Result<T, CoreMLError>
@@ -431,7 +437,9 @@ where
         return Ok(T::default());
     }
     serde_json::from_str(&json).map_err(|error| {
-        CoreMLError::InvalidArgument(format!("failed to decode custom-model JSON payload: {error}"))
+        CoreMLError::InvalidArgument(format!(
+            "failed to decode custom-model JSON payload: {error}"
+        ))
     })
 }
 
@@ -465,7 +473,8 @@ fn write_error(error_out: *mut *mut c_char, message: &str) {
 fn duplicate_c_string(message: &str) -> *mut c_char {
     let sanitized = message.replace('\0', " ");
     let c_string = CString::new(sanitized).unwrap_or_else(|_| {
-        CString::new("failed to encode custom-model error message").expect("static strings are valid")
+        CString::new("failed to encode custom-model error message")
+            .expect("static strings are valid")
     });
     unsafe { strdup(c_string.as_ptr()) }
 }

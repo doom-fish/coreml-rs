@@ -78,16 +78,30 @@ fn custom_model_registration_round_trips_single_and_batch_predictions() {
         )
         .expect("single custom-model prediction should succeed");
     assert_eq!(output.get_double("value"), Some(7.0));
-    assert_eq!(output.get_string("description_state"), Some(String::from("empty")));
+    assert_eq!(
+        output.get_string("description_state"),
+        Some(String::from("empty"))
+    );
 
-    let batch = BatchProvider::from_feature_providers(vec![input_provider(1.0), input_provider(-2.0)]);
+    let batch =
+        BatchProvider::from_feature_providers(vec![input_provider(1.0), input_provider(-2.0)]);
     let batch_output = model
         .predict_batch(&batch, &PredictionOptions::default())
         .expect("batch custom-model prediction should succeed");
 
     assert_eq!(batch_output.len(), 2);
-    assert_eq!(batch_output.get(0).and_then(|provider| provider.get_double("value")), Some(3.0));
-    assert_eq!(batch_output.get(1).and_then(|provider| provider.get_double("value")), Some(-6.0));
+    assert_eq!(
+        batch_output
+            .get(0)
+            .and_then(|provider| provider.get_double("value")),
+        Some(3.0)
+    );
+    assert_eq!(
+        batch_output
+            .get(1)
+            .and_then(|provider| provider.get_double("value")),
+        Some(-6.0)
+    );
 }
 
 #[test]

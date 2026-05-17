@@ -15,6 +15,9 @@ impl MLCustomModel for ScaleModel {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let registration =
         MLCustomModelRegistration::register("RustExampleScaleModel", |_context| Ok(ScaleModel))?;
-    println!("registered custom model class: {}", registration.class_name());
+    println!(
+        "registered custom model class: {}",
+        registration.class_name()
+    );
     Ok(())
 }
