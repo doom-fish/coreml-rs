@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] - 2026-05-18
+
+### Added
+
+- New `async` Cargo feature that enables `Model::load_async(path, configuration)` and `Model::predict_async(inputs, options)`, executor-agnostic wrappers over CoreML's asynchronous model loading and single-prediction APIs.
+- Integration tests covering asynchronous model loading and prediction against a tiny sentiment-classifier fixture.
+
 ## [0.2.2] - 2026-05-17
 
 ### Added

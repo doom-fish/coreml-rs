@@ -1,6 +1,35 @@
 import CoreML
 import Foundation
 
+public typealias CMModelAsyncCallback = @convention(c) (
+  Int32,
+  UnsafeMutableRawPointer?,
+  UnsafePointer<CChar>?,
+  UnsafeMutableRawPointer?
+) -> Void
+
+final class CMModelAsyncCallbackBox: @unchecked Sendable {
+  let callback: CMModelAsyncCallback
+  let refcon: UnsafeMutableRawPointer?
+
+  init(callback: @escaping CMModelAsyncCallback, refcon: UnsafeMutableRawPointer?) {
+    self.callback = callback
+    self.refcon = refcon
+  }
+
+  func succeed(_ result: UnsafeMutableRawPointer) {
+    callback(CM_OK, result, nil, refcon)
+  }
+
+  func fail(status: Int32, message: String) {
+    message.withCString { callback(status, nil, $0, refcon) }
+  }
+
+  func fail(error: Error, fallback: Int32) {
+    fail(status: cm_status_code(for: error, fallback: fallback), message: error.localizedDescription)
+  }
+}
+
 @_cdecl("cm_model_load")
 public func cm_model_load(
   _ pathPtr: UnsafePointer<CChar>?,
@@ -22,6 +51,35 @@ public func cm_model_load(
   } catch {
     cm_write_error(errorOut, error.localizedDescription)
     return cm_status_code(for: error, fallback: CM_MODEL_LOAD_FAILED)
+  }
+}
+
+@_cdecl("cm_model_load_async")
+public func cm_model_load_async(
+  _ pathPtr: UnsafePointer<CChar>?,
+  _ configurationJson: UnsafePointer<CChar>?,
+  _ callback: @escaping CMModelAsyncCallback,
+  _ refcon: UnsafeMutableRawPointer?
+) {
+  let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
+  guard let pathPtr else {
+    box.fail(status: CM_INVALID_ARGUMENT, message: "model path must not be null")
+    return
+  }
+
+  do {
+    let configuration = try cm_make_configuration(from: configurationJson)
+    let url = cm_url(from: pathPtr)
+    MLModel.load(contentsOf: url, configuration: configuration) { result in
+      switch result {
+      case let .success(model):
+        box.succeed(cm_retain(model))
+      case let .failure(error):
+        box.fail(error: error, fallback: CM_MODEL_LOAD_FAILED)
+      }
+    }
+  } catch {
+    box.fail(error: error, fallback: CM_MODEL_LOAD_FAILED)
   }
 }
 
@@ -67,6 +125,42 @@ public func cm_model_predict(
   _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 ) -> Int32 {
   cm_model_predict_with_options(modelPtr, inputsPtr, nil, outProvider, errorOut)
+}
+
+@_cdecl("cm_model_predict_async")
+public func cm_model_predict_async(
+  _ modelPtr: UnsafeMutableRawPointer?,
+  _ inputsPtr: UnsafeMutableRawPointer?,
+  _ predictionOptionsJson: UnsafePointer<CChar>?,
+  _ callback: @escaping CMModelAsyncCallback,
+  _ refcon: UnsafeMutableRawPointer?
+) {
+  let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
+  guard let modelPtr, let inputsPtr else {
+    box.fail(status: CM_INVALID_ARGUMENT, message: "model and inputs must not be null")
+    return
+  }
+  guard #available(macOS 14.0, *) else {
+    box.fail(status: CM_UNSUPPORTED, message: "asynchronous prediction requires macOS 14.0+")
+    return
+  }
+
+  let model: MLModel = cm_borrow(modelPtr)
+  let inputs: CMFeatureProviderBox = cm_borrow(inputsPtr)
+
+  do {
+    let options = try cm_make_prediction_options(from: predictionOptionsJson)
+    Task {
+      do {
+        let output = try await model.prediction(from: inputs, options: options)
+        box.succeed(cm_retain(CMFeatureProviderBox(provider: output)))
+      } catch {
+        box.fail(error: error, fallback: CM_PREDICTION_FAILED)
+      }
+    }
+  } catch {
+    box.fail(error: error, fallback: CM_PREDICTION_FAILED)
+  }
 }
 
 @_cdecl("cm_model_predict_with_options")

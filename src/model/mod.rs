@@ -1,12 +1,23 @@
 //! `MLModel` loading, description, compilation, and inference.
 
+#[cfg(feature = "async")]
+use core::ffi::c_char;
 use core::ffi::c_void;
 use std::ffi::CString;
 use std::path::Path;
 use std::ptr;
 
+#[cfg(feature = "async")]
+use doom_fish_utils::completion::{error_from_cstr, AsyncCompletion};
+#[cfg(feature = "async")]
+use doom_fish_utils::panic_safe::catch_user_panic;
+#[cfg(feature = "async")]
+use serde::{Deserialize, Serialize};
+
 use crate::compute_device::{decode_device_list, ComputeDevice};
 use crate::configuration::ModelConfiguration;
+#[cfg(feature = "async")]
+use crate::error::from_status_message;
 use crate::error::{from_swift, take_owned_c_string, CoreMLError};
 use crate::feature_provider::{BatchProvider, FeatureProvider};
 use crate::ffi;
@@ -52,6 +63,38 @@ impl Model {
             return Err(from_swift(status, error));
         }
         Ok(Self { ptr: model })
+    }
+
+    /// Load a compiled `.mlmodelc` bundle from disk asynchronously.
+    ///
+    /// Wraps CoreML's async `MLModel.load(contentsOf:configuration:...)` surface.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path is invalid or CoreML rejects the model.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[allow(clippy::future_not_send)]
+    pub async fn load_async(
+        path: &Path,
+        configuration: Option<&ModelConfiguration>,
+    ) -> Result<Self, CoreMLError> {
+        let path = path_to_c_string(path)?;
+        let default_configuration = ModelConfiguration::default();
+        let configuration = configuration.unwrap_or(&default_configuration);
+        let configuration_json = configuration.as_json_c_string()?;
+        let (future, user_data) = AsyncCompletion::create();
+        unsafe {
+            ffi::cm_model_load_async(
+                path.as_ptr(),
+                configuration_json.as_ptr(),
+                model_load_async_callback,
+                user_data,
+            );
+        }
+        future
+            .await
+            .map_err(|payload| decode_async_error(payload, ffi::status::MODEL_LOAD_FAILED))
     }
 
     /// Load a model directly from `.mlmodel` specification bytes using `MLModelAsset`.
@@ -138,6 +181,39 @@ impl Model {
     pub fn predict(&self, inputs: &FeatureProvider) -> Result<FeatureProvider, CoreMLError> {
         let options = PredictionOptions::default();
         self.predict_with_options(inputs, &options)
+    }
+
+    /// Run one asynchronous prediction with optional explicit options.
+    ///
+    /// Wraps CoreML's async single-prediction surface.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if CoreML rejects the input feature provider or inference fails.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[allow(clippy::future_not_send)]
+    pub async fn predict_async(
+        &self,
+        inputs: &FeatureProvider,
+        options: Option<&PredictionOptions>,
+    ) -> Result<FeatureProvider, CoreMLError> {
+        let default_options = PredictionOptions::default();
+        let options = options.unwrap_or(&default_options);
+        let options_json = options.as_json_c_string()?;
+        let (future, user_data) = AsyncCompletion::create();
+        unsafe {
+            ffi::cm_model_predict_async(
+                self.ptr,
+                inputs.ptr,
+                options_json.as_ptr(),
+                model_predict_async_callback,
+                user_data,
+            );
+        }
+        future
+            .await
+            .map_err(|payload| decode_async_error(payload, ffi::status::PREDICTION_FAILED))
     }
 
     /// Run one synchronous prediction with explicit options.
@@ -315,6 +391,110 @@ impl core::fmt::Debug for Model {
             .field("detailed_description", &self.detailed_description())
             .finish()
     }
+}
+
+#[cfg(feature = "async")]
+#[derive(Debug, Serialize, Deserialize)]
+struct AsyncErrorPayload {
+    status: i32,
+    message: String,
+}
+
+#[cfg(feature = "async")]
+fn encode_async_error(status: i32, message: String) -> String {
+    serde_json::to_string(&AsyncErrorPayload {
+        status,
+        message: message.clone(),
+    })
+    .unwrap_or(message)
+}
+
+#[cfg(feature = "async")]
+fn decode_async_error(payload: String, fallback_status: i32) -> CoreMLError {
+    serde_json::from_str::<AsyncErrorPayload>(&payload).map_or_else(
+        |_| from_status_message(fallback_status, payload),
+        |payload| from_status_message(payload.status, payload.message),
+    )
+}
+
+#[cfg(feature = "async")]
+extern "C" fn model_load_async_callback(
+    status: i32,
+    result: *mut c_void,
+    error: *const c_char,
+    user_data: *mut c_void,
+) {
+    catch_user_panic("coreml::model_load_async_callback", || {
+        if status == ffi::status::OK {
+            if result.is_null() {
+                unsafe {
+                    AsyncCompletion::<Model>::complete_err(
+                        user_data,
+                        encode_async_error(
+                            ffi::status::MODEL_LOAD_FAILED,
+                            "CoreML async model load returned no model".to_owned(),
+                        ),
+                    );
+                }
+            } else {
+                unsafe { AsyncCompletion::<Model>::complete_ok(user_data, Model { ptr: result }) };
+            }
+            return;
+        }
+
+        if !result.is_null() {
+            unsafe { ffi::cm_object_release(result) };
+        }
+
+        let message = unsafe { error_from_cstr(error) };
+        unsafe {
+            AsyncCompletion::<Model>::complete_err(user_data, encode_async_error(status, message));
+        }
+    });
+}
+
+#[cfg(feature = "async")]
+extern "C" fn model_predict_async_callback(
+    status: i32,
+    result: *mut c_void,
+    error: *const c_char,
+    user_data: *mut c_void,
+) {
+    catch_user_panic("coreml::model_predict_async_callback", || {
+        if status == ffi::status::OK {
+            if result.is_null() {
+                unsafe {
+                    AsyncCompletion::<FeatureProvider>::complete_err(
+                        user_data,
+                        encode_async_error(
+                            ffi::status::PREDICTION_FAILED,
+                            "CoreML async prediction returned no outputs".to_owned(),
+                        ),
+                    );
+                }
+            } else {
+                unsafe {
+                    AsyncCompletion::<FeatureProvider>::complete_ok(
+                        user_data,
+                        FeatureProvider { ptr: result },
+                    );
+                }
+            }
+            return;
+        }
+
+        if !result.is_null() {
+            unsafe { ffi::cm_object_release(result) };
+        }
+
+        let message = unsafe { error_from_cstr(error) };
+        unsafe {
+            AsyncCompletion::<FeatureProvider>::complete_err(
+                user_data,
+                encode_async_error(status, message),
+            );
+        }
+    });
 }
 
 fn path_to_c_string(path: impl AsRef<Path>) -> Result<CString, CoreMLError> {
