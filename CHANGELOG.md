@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.3] - 2026-05-20
+
+- Widen `doom-fish-utils` dependency bound to `<0.4` so the 0.3.x SPSC-ring release resolves cleanly. No source changes.
+
 ## [0.3.2] - 2026-05-18
 
 - Widen apple-cf version bound to `<0.10` so 0.9.x resolves.
