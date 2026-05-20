@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.4] - 2026-05-20
+
+- Phase 32 completeness + async sweep.
+- Added async CoreML model compilation helpers (`ModelCompiler::compile_async`, `Model::compile_model_async`, `Model::compile_and_load_async`) and async stateful prediction via `Model::predict_with_state_async`.
+- Refreshed the coverage docs against `MacOSX26.5.sdk`.
+
 ## [0.3.3] - 2026-05-20
 
 - Widen `doom-fish-utils` dependency bound to `<0.4` so the 0.3.x SPSC-ring release resolves cleanly. No source changes.

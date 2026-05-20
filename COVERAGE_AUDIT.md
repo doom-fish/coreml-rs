@@ -1,4 +1,4 @@
-# coreml coverage audit (vs MacOSX26.2.sdk)
+# coreml coverage audit (vs MacOSX26.5.sdk)
 
 SDK_PUBLIC_SYMBOLS: 92
 VERIFIED: 92
@@ -8,7 +8,7 @@ COVERAGE_PCT: 100.0%
 
 This audit counts top-level Objective-C CoreML symbols (interfaces, protocols, enums, exported constants, and top-level C functions), not every individual method/property. Stringly-typed/raw-JSON access counts as **VERIFIED** when the crate’s public API can still reach the underlying framework surface (for example metadata keys, parameter keys, and metric keys).
 
-## Not counted (macOS unavailable in MacOSX26.2.sdk)
+## Not counted (macOS unavailable in MacOSX26.5.sdk)
 
 | Symbol | Kind | Header | Notes |
 | --- | --- | --- | --- |
@@ -31,8 +31,8 @@ This audit counts top-level Objective-C CoreML symbols (interfaces, protocols, e
 | MLFeatureValue | interface | MLFeatureValue.h | `Feature` in `src/feature.rs` (int/double/string/multi-array/image/sequence/undefined/dictionary). |
 | MLImageConstraint | interface | MLImageConstraint.h | `ImageConstraint` / `DetailedImageConstraint` snapshots in `src/model_description.rs` (fixed size + flexible image-size metadata). |
 | MLMetricKey | interface | MLMetricKey.h | `UpdateContext::metrics: BTreeMap<String, Value>` in `src/update.rs`; the Swift bridge stringifies `MLMetricKey` names in `swift-bridge/Sources/CoreMLBridge/Update.swift`. |
-| MLModel (MLModelCompilation) | interface | MLModel+MLModelCompilation.h | `ModelCompiler::compile`, `Model::compile_model`, and `Model::compile_and_load` in `src/model_compiler.rs` and `src/model/mod.rs`. |
-| MLModel (MLState) | interface | MLModel+MLState.h | `Model::new_state`, `predict_with_state`, and `predict_with_state_and_options` in `src/model/mod.rs`. |
+| MLModel (MLModelCompilation) | interface | MLModel+MLModelCompilation.h | `ModelCompiler::{compile, compile_async, compile_and_load_async}` plus `Model::{compile_model, compile_model_async, compile_and_load, compile_and_load_async}` in `src/model_compiler.rs` and `src/model/mod.rs`. |
+| MLModel (MLState) | interface | MLModel+MLState.h | `Model::new_state`, `predict_with_state`, `predict_with_state_and_options`, and `predict_with_state_async` in `src/model/mod.rs`. |
 | MLModel | interface | MLModel.h | `Model` in `src/model/mod.rs` (`load_from_url`, `predict*`, `predict_batch*`, `description`). |
 | MLModelAsset | interface | MLModelAsset.h | `Model::load_from_specification_data` in `src/model/mod.rs`; the Swift bridge constructs `MLModelAsset(specification:)` in `swift-bridge/Sources/CoreMLBridge/Model.swift`. |
 | MLComputeUnits | enum | MLModelConfiguration.h | `ComputeUnits` in `src/configuration/mod.rs`. |

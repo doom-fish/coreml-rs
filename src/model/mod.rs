@@ -141,6 +141,20 @@ impl Model {
         ModelCompiler::compile(mlmodel_path)
     }
 
+    /// Compile a source `.mlmodel` file asynchronously.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if CoreML cannot compile the source model.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[allow(clippy::future_not_send)]
+    pub async fn compile_model_async(
+        mlmodel_path: &Path,
+    ) -> Result<std::path::PathBuf, CoreMLError> {
+        ModelCompiler::compile_async(mlmodel_path).await
+    }
+
     /// Compile a source `.mlmodel` then load the resulting compiled bundle.
     ///
     /// # Errors
@@ -151,6 +165,21 @@ impl Model {
         configuration: &ModelConfiguration,
     ) -> Result<Self, CoreMLError> {
         ModelCompiler::compile_and_load(mlmodel_path, configuration)
+    }
+
+    /// Compile a source `.mlmodel` asynchronously and load the compiled bundle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if compilation or loading fails.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[allow(clippy::future_not_send)]
+    pub async fn compile_and_load_async(
+        mlmodel_path: &Path,
+        configuration: Option<&ModelConfiguration>,
+    ) -> Result<Self, CoreMLError> {
+        ModelCompiler::compile_and_load_async(mlmodel_path, configuration).await
     }
 
     /// Snapshot the model description.
@@ -374,6 +403,39 @@ impl Model {
             CoreMLError::StateFailed("CoreML stateful prediction returned no outputs".to_owned())
         })
     }
+
+    /// Run a stateful prediction asynchronously with optional explicit options.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if CoreML rejects the input features or the provided state.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[allow(clippy::future_not_send)]
+    pub async fn predict_with_state_async(
+        &self,
+        inputs: &FeatureProvider,
+        state: &MLState,
+        options: Option<&PredictionOptions>,
+    ) -> Result<FeatureProvider, CoreMLError> {
+        let default_options = PredictionOptions::default();
+        let options = options.unwrap_or(&default_options);
+        let options_json = options.as_json_c_string()?;
+        let (future, user_data) = AsyncCompletion::create();
+        unsafe {
+            ffi::cm_model_predict_with_state_async(
+                self.ptr,
+                inputs.ptr,
+                state.ptr,
+                options_json.as_ptr(),
+                model_predict_async_callback,
+                user_data,
+            );
+        }
+        future
+            .await
+            .map_err(|payload| decode_async_error(payload, ffi::status::STATE_FAILED))
+    }
 }
 
 impl Drop for Model {
@@ -401,7 +463,7 @@ struct AsyncErrorPayload {
 }
 
 #[cfg(feature = "async")]
-fn encode_async_error(status: i32, message: String) -> String {
+pub(crate) fn encode_async_error(status: i32, message: String) -> String {
     serde_json::to_string(&AsyncErrorPayload {
         status,
         message: message.clone(),
@@ -410,7 +472,7 @@ fn encode_async_error(status: i32, message: String) -> String {
 }
 
 #[cfg(feature = "async")]
-fn decode_async_error(payload: String, fallback_status: i32) -> CoreMLError {
+pub(crate) fn decode_async_error(payload: String, fallback_status: i32) -> CoreMLError {
     serde_json::from_str::<AsyncErrorPayload>(&payload).map_or_else(
         |_| from_status_message(fallback_status, payload),
         |payload| from_status_message(payload.status, payload.message),

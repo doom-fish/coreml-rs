@@ -67,6 +67,42 @@ import Foundation
         return CM_UNSUPPORTED
     }
 
+    @_cdecl("cm_model_predict_with_state_async")
+    public func cm_model_predict_with_state_async(
+        _ modelPtr: UnsafeMutableRawPointer?,
+        _ inputsPtr: UnsafeMutableRawPointer?,
+        _ statePtr: UnsafeMutableRawPointer?,
+        _ predictionOptionsJson: UnsafePointer<CChar>?,
+        _ callback: @escaping CMModelAsyncCallback,
+        _ refcon: UnsafeMutableRawPointer?
+    ) {
+        let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
+        guard let modelPtr, let inputsPtr, let statePtr else {
+            box.fail(status: CM_INVALID_ARGUMENT, message: "model, inputs, and state must not be null")
+            return
+        }
+        if #available(macOS 15.0, *) {
+            let model: MLModel = cm_borrow(modelPtr)
+            let inputs: CMFeatureProviderBox = cm_borrow(inputsPtr)
+            let state: MLState = cm_borrow(statePtr)
+            do {
+                let options = try cm_make_prediction_options(from: predictionOptionsJson)
+                Task {
+                    do {
+                        let output = try await model.prediction(from: inputs, using: state, options: options)
+                        box.succeed(cm_retain(CMFeatureProviderBox(provider: output)))
+                    } catch {
+                        box.fail(error: error, fallback: CM_STATE_FAILED)
+                    }
+                }
+            } catch {
+                box.fail(error: error, fallback: CM_STATE_FAILED)
+            }
+            return
+        }
+        box.fail(status: CM_UNSUPPORTED, message: "MLState requires macOS 15.0+")
+    }
+
     @_cdecl("cm_state_snapshot_multi_array")
     public func cm_state_snapshot_multi_array(
         _ statePtr: UnsafeMutableRawPointer?,
@@ -132,6 +168,19 @@ import Foundation
         outProvider.pointee = nil
         cm_write_error(errorOut, "MLState requires a macOS 15.0+ SDK")
         return CM_UNSUPPORTED
+    }
+
+    @_cdecl("cm_model_predict_with_state_async")
+    public func cm_model_predict_with_state_async(
+        _: UnsafeMutableRawPointer?,
+        _: UnsafeMutableRawPointer?,
+        _: UnsafeMutableRawPointer?,
+        _: UnsafePointer<CChar>?,
+        _ callback: @escaping CMModelAsyncCallback,
+        _ refcon: UnsafeMutableRawPointer?
+    ) {
+        let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
+        box.fail(status: CM_UNSUPPORTED, message: "MLState requires a macOS 15.0+ SDK")
     }
 
     @_cdecl("cm_state_snapshot_multi_array")

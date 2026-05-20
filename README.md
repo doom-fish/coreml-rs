@@ -28,8 +28,22 @@ Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com
 
 ```toml
 [dependencies]
-coreml = "0.2.2"
+coreml = "0.3.4"
 ```
+
+## Async API
+
+Enable the optional `async` feature for executor-agnostic futures around model
+loading/compilation and one-shot prediction:
+
+```toml
+[dependencies]
+coreml = { version = "0.3.4", features = ["async"] }
+```
+
+This covers `Model::load_async`, `ModelCompiler::compile_async`,
+`Model::compile_model_async`, `Model::compile_and_load_async`,
+`Model::predict_async`, and `Model::predict_with_state_async`.
 
 ## Quick start
 
@@ -83,7 +97,7 @@ cargo run --example 06_model_configuration
 
 ## Coverage notes
 
-See [COVERAGE.md](COVERAGE.md) and [COVERAGE_AUDIT.md](COVERAGE_AUDIT.md) for the SDK audit. `coreml` 0.2.2 now covers all 92 audited public macOS CoreML top-level symbols, including Rust-backed `MLCustomLayer` and `MLCustomModel` authoring callbacks.
+See [COVERAGE.md](COVERAGE.md) and [COVERAGE_AUDIT.md](COVERAGE_AUDIT.md) for the SDK audit. `coreml` 0.3.4 now covers all 92 audited public macOS CoreML top-level symbols, including Rust-backed `MLCustomLayer` and `MLCustomModel` authoring callbacks, plus executor-agnostic async compilation and stateful-prediction helpers.
 
 ## License
 

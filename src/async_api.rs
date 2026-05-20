@@ -1,7 +1,8 @@
 //! Async API for `coreml`.
 //!
-//! Enable the `async` feature to use [`Model::load_async`] and
-//! [`Model::predict_async`].
+//! Enable the `async` feature to use [`Model::load_async`],
+//! [`ModelCompiler::compile_async`], [`Model::predict_async`], and
+//! [`Model::predict_with_state_async`].
 //!
 //! ```toml
 //! coreml = { version = "0.3", features = ["async"] }
@@ -27,5 +28,7 @@
 pub use crate::configuration::ModelConfiguration;
 pub use crate::error::CoreMLError;
 pub use crate::feature_provider::FeatureProvider;
+pub use crate::ml_state::MLState;
 pub use crate::model::Model;
+pub use crate::model_compiler::ModelCompiler;
 pub use crate::prediction::PredictionOptions;

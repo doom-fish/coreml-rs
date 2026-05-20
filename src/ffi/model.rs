@@ -78,4 +78,12 @@ extern "C" {
         out_provider: *mut *mut c_void,
         error_out: *mut *mut c_char,
     ) -> i32;
+    pub fn cm_model_predict_with_state_async(
+        model: *mut c_void,
+        inputs: *mut c_void,
+        state: *mut c_void,
+        prediction_options_json: *const c_char,
+        callback: ModelAsyncCallback,
+        user_data: *mut c_void,
+    );
 }

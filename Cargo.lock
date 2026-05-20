@@ -16,7 +16,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "coreml"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "apple-cf",
  "doom-fish-utils",
@@ -50,7 +50,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "doom-fish-utils"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "crossbeam-queue",
  "futures-util",

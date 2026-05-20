@@ -1,8 +1,9 @@
 # CoreML.framework coverage audit
 
-Crate: `coreml` 0.2.2  
+Crate: `coreml` 0.3.4  
 Framework: `CoreML.framework`  
-Headers audited from: `$(xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks/CoreML.framework/Headers`
+Headers audited from: Xcode 26.5 / `MacOSX26.5.sdk`  
+Phase 32 async note: one-shot model compilation and stateful prediction now have executor-agnostic future wrappers alongside the existing synchronous APIs.
 
 Legend:
 
@@ -13,9 +14,9 @@ Legend:
 | Header / API surface | Status | Rust / bridge note |
 | --- | --- | --- |
 | `MLModel.h` | ✅ | `Model` covers compiled-model loading, in-memory asset loading, synchronous prediction, batch prediction, and stateful prediction entry points. |
-| `MLModel+MLModelCompilation.h` | ✅ | `ModelCompiler::compile` plus `Model::compile_model` / `Model::compile_and_load`. |
+| `MLModel+MLModelCompilation.h` | ✅ | `ModelCompiler::{compile, compile_async, compile_and_load_async}` plus `Model::{compile_model, compile_model_async, compile_and_load, compile_and_load_async}`. |
 | `MLModelAsset.h` | ✅ | Used for `Model::load_from_specification_data`. |
-| `MLModel+MLState.h`, `MLState.h` | ✅ | `Model::new_state`, `Model::predict_with_state`, and `MLState::snapshot_multi_array`. |
+| `MLModel+MLState.h`, `MLState.h` | ✅ | `Model::new_state`, `Model::{predict_with_state, predict_with_state_and_options, predict_with_state_async}`, and `MLState::snapshot_multi_array`. |
 | `MLPredictionOptions.h` | ✅ | `PredictionOptions` builder plus bridge round-trip validation. |
 | `MLModelConfiguration.h`, `MLOptimizationHints.h`, `MLReshapeFrequencyHint.h`, `MLSpecializationStrategy.h`, `MLParameterKey.h` | ✅ | `ModelConfiguration` exposes compute units, low-precision GPU accumulation, display/function names, optimization hints, and parameter dictionaries. |
 | `MLModelDescription.h`, `MLFeatureDescription.h`, `MLParameterDescription.h`, `MLNumericConstraint.h`, `MLModelMetadataKeys.h` | ✅ | `ModelDescription` snapshots cover inputs/outputs/state/training features, metadata, predicted feature names, class labels, and parameter constraints. |
