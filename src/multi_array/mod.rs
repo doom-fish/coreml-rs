@@ -297,6 +297,32 @@ impl MultiArray {
         self.len() == 0
     }
 
+    /// Number of scalar elements spanned by the backing storage, accounting for
+    /// the array's `strides`.
+    ///
+    /// For a contiguous array this equals [`Self::len`] (the product of the
+    /// shape). For a non-contiguous (strided) array it is the extent required to
+    /// address every logical element given the reported strides, computed as
+    /// `1 + Σ (dimᵢ - 1) * strideᵢ`. This is the correct length for any raw
+    /// storage slice (see [`Self::as_f32_slice`]); using the naive product of
+    /// dimensions would under-size the slice and cause out-of-bounds reads when
+    /// indexing strided elements.
+    #[must_use]
+    pub fn storage_len(&self) -> usize {
+        storage_extent_from(&self.shape(), &self.strides()).unwrap_or_else(|| self.len())
+    }
+
+    /// Whether the backing storage is tightly packed (contains no stride
+    /// padding), i.e. the storage extent equals the logical element count.
+    ///
+    /// When this returns `true`, a raw storage slice can be treated as densely
+    /// laid out in memory order. When it returns `false`, callers must address
+    /// elements through the strided accessors (e.g. [`Self::get_f32`]).
+    #[must_use]
+    pub fn is_contiguous(&self) -> bool {
+        self.storage_len() == self.len()
+    }
+
     /// Scalar data type.
     #[must_use]
     pub fn data_type(&self) -> DataType {
@@ -305,67 +331,97 @@ impl MultiArray {
     }
 
     /// Immutable raw `Float32` storage view.
+    ///
+    /// The returned slice spans the full backing storage extent reported by
+    /// `MLMultiArray` (see [`Self::storage_len`]), not the logical element count.
+    /// For a non-contiguous (strided) array the storage extent is larger than
+    /// the product of the shape, and the slice may therefore contain padding or
+    /// interleaved elements between logical values. Use the strided accessors
+    /// (e.g. [`Self::get_f32`]) or [`Self::strides`] to address individual
+    /// elements correctly; do not assume the slice is tightly packed in logical
+    /// order unless [`Self::is_contiguous`] returns `true`.
     #[must_use]
     pub fn as_f32_slice(&self) -> Option<&[f32]> {
         (self.data_type() == DataType::Float32).then(|| unsafe {
-            std::slice::from_raw_parts(self.data_ptr().cast::<f32>(), self.len())
+            std::slice::from_raw_parts(self.data_ptr().cast::<f32>(), self.storage_len())
         })
     }
 
     /// Mutable raw `Float32` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_f32_slice_mut(&mut self) -> Option<&mut [f32]> {
-        (self.data_type() == DataType::Float32).then(|| unsafe {
-            std::slice::from_raw_parts_mut(self.data_ptr().cast::<f32>(), self.len())
-        })
+        let len = self.storage_len();
+        (self.data_type() == DataType::Float32)
+            .then(|| unsafe { std::slice::from_raw_parts_mut(self.data_ptr().cast::<f32>(), len) })
     }
 
     /// Immutable raw `Float16` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_f16_slice(&self) -> Option<&[f16]> {
         (self.data_type() == DataType::Float16).then(|| unsafe {
-            std::slice::from_raw_parts(self.data_ptr().cast::<f16>(), self.len())
+            std::slice::from_raw_parts(self.data_ptr().cast::<f16>(), self.storage_len())
         })
     }
 
     /// Mutable raw `Float16` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_f16_slice_mut(&mut self) -> Option<&mut [f16]> {
-        (self.data_type() == DataType::Float16).then(|| unsafe {
-            std::slice::from_raw_parts_mut(self.data_ptr().cast::<f16>(), self.len())
-        })
+        let len = self.storage_len();
+        (self.data_type() == DataType::Float16)
+            .then(|| unsafe { std::slice::from_raw_parts_mut(self.data_ptr().cast::<f16>(), len) })
     }
 
     /// Immutable raw `Int32` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_i32_slice(&self) -> Option<&[i32]> {
         (self.data_type() == DataType::Int32).then(|| unsafe {
-            std::slice::from_raw_parts(self.data_ptr().cast::<i32>(), self.len())
+            std::slice::from_raw_parts(self.data_ptr().cast::<i32>(), self.storage_len())
         })
     }
 
     /// Mutable raw `Int32` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_i32_slice_mut(&mut self) -> Option<&mut [i32]> {
-        (self.data_type() == DataType::Int32).then(|| unsafe {
-            std::slice::from_raw_parts_mut(self.data_ptr().cast::<i32>(), self.len())
-        })
+        let len = self.storage_len();
+        (self.data_type() == DataType::Int32)
+            .then(|| unsafe { std::slice::from_raw_parts_mut(self.data_ptr().cast::<i32>(), len) })
     }
 
     /// Immutable raw `Float64` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_f64_slice(&self) -> Option<&[f64]> {
         (self.data_type() == DataType::Float64).then(|| unsafe {
-            std::slice::from_raw_parts(self.data_ptr().cast::<f64>(), self.len())
+            std::slice::from_raw_parts(self.data_ptr().cast::<f64>(), self.storage_len())
         })
     }
 
     /// Mutable raw `Float64` storage view.
+    ///
+    /// See [`Self::as_f32_slice`] for the slice-sizing and strided-layout
+    /// semantics.
     #[must_use]
     pub fn as_f64_slice_mut(&mut self) -> Option<&mut [f64]> {
-        (self.data_type() == DataType::Float64).then(|| unsafe {
-            std::slice::from_raw_parts_mut(self.data_ptr().cast::<f64>(), self.len())
-        })
+        let len = self.storage_len();
+        (self.data_type() == DataType::Float64)
+            .then(|| unsafe { std::slice::from_raw_parts_mut(self.data_ptr().cast::<f64>(), len) })
     }
 
     /// Copy from a `Float32` slice into the underlying storage.
@@ -557,7 +613,8 @@ impl MultiArray {
             if index >= dimension {
                 return None;
             }
-            offset = offset.saturating_add(index.saturating_mul(stride));
+            let term = index.checked_mul(stride)?;
+            offset = offset.checked_add(term)?;
         }
         Some(offset)
     }
@@ -715,5 +772,67 @@ impl core::fmt::Debug for MultiArray {
             .field("data_type", &self.data_type())
             .field("len", &self.len())
             .finish()
+    }
+}
+
+/// Compute the number of scalar elements spanned by the backing storage of an
+/// `MLMultiArray` with the given `shape` and `strides`.
+///
+/// The extent is `1 + Σ (dimᵢ - 1) * strideᵢ`, which is the highest addressable
+/// element offset plus one. All arithmetic is overflow-checked; on overflow or
+/// a shape/stride length mismatch this returns `None` so the caller can fall
+/// back to a conservative length. A rank-0 (scalar) array occupies a single
+/// element, and any zero-sized dimension yields an extent of zero.
+fn storage_extent_from(shape: &[usize], strides: &[usize]) -> Option<usize> {
+    if shape.is_empty() {
+        return Some(1);
+    }
+    if strides.len() != shape.len() {
+        return None;
+    }
+    let mut extent: usize = 1;
+    for (&dimension, &stride) in shape.iter().zip(strides) {
+        if dimension == 0 {
+            return Some(0);
+        }
+        let span = (dimension - 1).checked_mul(stride)?;
+        extent = extent.checked_add(span)?;
+    }
+    Some(extent)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::storage_extent_from;
+
+    #[test]
+    fn contiguous_extent_matches_product_of_dims() {
+        // Row-major contiguous [2, 3] -> strides [3, 1], extent 6.
+        assert_eq!(storage_extent_from(&[2, 3], &[3, 1]), Some(6));
+        // Row-major contiguous [2, 3, 4] -> strides [12, 4, 1], extent 24.
+        assert_eq!(storage_extent_from(&[2, 3, 4], &[12, 4, 1]), Some(24));
+    }
+
+    #[test]
+    fn strided_extent_accounts_for_padding() {
+        // Non-contiguous [2, 3] with a padded leading stride: each row occupies
+        // 5 elements of storage even though only 3 are logical. Naive product
+        // would report 6, but the real backing extent is 1 + 1*5 + 2*1 = 8.
+        assert_eq!(storage_extent_from(&[2, 3], &[5, 1]), Some(8));
+        // Inner-padded layout: stride 2 between adjacent columns.
+        // extent = 1 + (2-1)*6 + (3-1)*2 = 1 + 6 + 4 = 11.
+        assert_eq!(storage_extent_from(&[2, 3], &[6, 2]), Some(11));
+    }
+
+    #[test]
+    fn scalar_and_zero_dim_edge_cases() {
+        assert_eq!(storage_extent_from(&[], &[]), Some(1));
+        assert_eq!(storage_extent_from(&[0, 4], &[4, 1]), Some(0));
+    }
+
+    #[test]
+    fn mismatched_lengths_and_overflow_return_none() {
+        assert_eq!(storage_extent_from(&[2, 3], &[3]), None);
+        assert_eq!(storage_extent_from(&[2, 2], &[usize::MAX, 1]), None);
     }
 }
