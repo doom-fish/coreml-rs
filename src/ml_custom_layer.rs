@@ -404,11 +404,27 @@ pub unsafe extern "C" fn cm_rust_custom_layer_evaluate_cpu(
         let layer = layer_from_ptr(context)?;
         let input_ptrs = collect_raw_pointers(inputs, input_count, "custom-layer inputs")?;
         let output_ptrs = collect_raw_pointers(outputs, output_count, "custom-layer outputs")?;
+        // The arrays are borrowed from CoreML: the Swift bridge retains them for
+        // the duration of this call and releases them afterwards. We must build
+        // owning `MultiArray` wrappers to call the user callback, but must not
+        // run `MultiArray::Drop` on them or we would over-release the borrowed
+        // objects. `forget_borrowed_arrays` consumes each `Vec` (freeing its own
+        // backing storage) while leaking the borrowed pointers back to the caller.
         let input_arrays = multi_arrays_from_raw(&input_ptrs, "custom-layer input")?;
-        let mut output_arrays = multi_arrays_from_raw(&output_ptrs, "custom-layer output")?;
-        layer
+        let output_arrays = match multi_arrays_from_raw(&output_ptrs, "custom-layer output") {
+            Ok(arrays) => arrays,
+            Err(error) => {
+                forget_borrowed_arrays(input_arrays);
+                return Err(error);
+            }
+        };
+        let mut output_arrays = output_arrays;
+        let result = layer
             .inner
-            .evaluate_on_cpu(&input_arrays, &mut output_arrays)
+            .evaluate_on_cpu(&input_arrays, &mut output_arrays);
+        forget_borrowed_arrays(input_arrays);
+        forget_borrowed_arrays(output_arrays);
+        result
     })
 }
 
@@ -585,6 +601,16 @@ fn multi_arrays_from_raw(
             })
         })
         .collect()
+}
+
+/// Consume a vector of `MultiArray` wrappers that were built from pointers
+/// borrowed from CoreML, freeing the vector's own backing storage while
+/// suppressing `MultiArray::Drop` (which would over-release the borrowed
+/// objects the Swift bridge still owns).
+fn forget_borrowed_arrays(arrays: Vec<MultiArray>) {
+    for array in arrays {
+        core::mem::forget(array);
+    }
 }
 
 fn ffi_callback(

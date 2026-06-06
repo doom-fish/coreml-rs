@@ -123,7 +123,10 @@ extern "C" fn model_compile_async_callback(
 
         let message = unsafe { error_from_cstr(error) };
         unsafe {
-            AsyncCompletion::<PathBuf>::complete_err(user_data, encode_async_error(status, message));
+            AsyncCompletion::<PathBuf>::complete_err(
+                user_data,
+                encode_async_error(status, message),
+            );
         }
     });
 }

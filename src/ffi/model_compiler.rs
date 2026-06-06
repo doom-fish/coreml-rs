@@ -1,7 +1,11 @@
 use core::ffi::{c_char, c_void};
 
-pub type ModelCompilerAsyncCallback =
-    extern "C" fn(status: i32, compiled_path: *mut c_char, error: *const c_char, user_data: *mut c_void);
+pub type ModelCompilerAsyncCallback = extern "C" fn(
+    status: i32,
+    compiled_path: *mut c_char,
+    error: *const c_char,
+    user_data: *mut c_void,
+);
 
 extern "C" {
     pub fn cm_model_compile(

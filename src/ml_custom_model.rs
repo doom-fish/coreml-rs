@@ -319,6 +319,10 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict(
                 "custom-model prediction received a null feature-provider pointer".to_owned(),
             )
         })?;
+        // The caller (Swift bridge) retains the feature provider for the
+        // duration of this call and releases it afterwards, so this pointer is
+        // borrowed. Suppress `FeatureProvider::Drop` to avoid an over-release.
+        let input = core::mem::ManuallyDrop::new(input);
         let options = parse_json::<PredictionOptions>(prediction_options_json)?;
         let output = model.inner.prediction_from_features(&input, &options)?;
         *out_provider = output.ptr;
@@ -350,6 +354,9 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict_batch(
                 "custom-model batch prediction received a null batch-provider pointer".to_owned(),
             )
         })?;
+        // Borrowed from the Swift bridge (retained for the call duration);
+        // suppress `BatchProvider::Drop` to avoid an over-release.
+        let batch = core::mem::ManuallyDrop::new(batch);
         let options = parse_json::<PredictionOptions>(prediction_options_json)?;
         let output = model.inner.predictions_from_batch(&batch, &options)?;
         *out_batch = output.ptr;
