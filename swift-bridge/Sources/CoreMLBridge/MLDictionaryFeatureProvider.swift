@@ -26,6 +26,10 @@ final class CMFeatureProviderBox: NSObject, MLFeatureProvider {
     func featureValue(for featureName: String) -> MLFeatureValue? {
         values[featureName]
     }
+
+    func snapshot() -> CMFeatureProviderBox {
+        CMFeatureProviderBox(values: values)
+    }
 }
 
 @_cdecl("cm_feature_provider_new")

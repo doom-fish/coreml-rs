@@ -1,4 +1,5 @@
 import CoreML
+import Darwin
 import Foundation
 
 public typealias CMStateMultiArrayCallback = @convention(c) (
@@ -7,6 +8,84 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
 ) -> Void
 
 #if COREML_HAS_MACOS15_SDK
+    final class CMStateGate: @unchecked Sendable {
+        private let condition = NSCondition()
+        private var held = false
+        private var owner: pthread_t?
+        private var depth = 0
+
+        func withThreadAccess<T>(_ body: () throws -> T) rethrows -> T {
+            enter()
+            defer { leave() }
+            return try body()
+        }
+
+        func acquireForTask() async {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.condition.lock()
+                    while self.held {
+                        self.condition.wait()
+                    }
+                    self.held = true
+                    self.owner = nil
+                    self.depth = 1
+                    self.condition.unlock()
+                    continuation.resume()
+                }
+            }
+        }
+
+        func releaseFromTask() {
+            condition.lock()
+            held = false
+            owner = nil
+            depth = 0
+            condition.broadcast()
+            condition.unlock()
+        }
+
+        private func enter() {
+            condition.lock()
+            defer { condition.unlock() }
+            let current = pthread_self()
+            if held, let owner, pthread_equal(owner, current) != 0 {
+                depth += 1
+                return
+            }
+            while held {
+                condition.wait()
+            }
+            held = true
+            owner = current
+            depth = 1
+        }
+
+        private func leave() {
+            condition.lock()
+            defer { condition.unlock() }
+            depth -= 1
+            if depth == 0 {
+                held = false
+                owner = nil
+                condition.broadcast()
+            }
+        }
+    }
+
+    @available(macOS 15.0, *)
+    final class CMStateBox: NSObject, @unchecked Sendable {
+        let state: MLState
+        let stateNames: Set<String>
+        let gate = CMStateGate()
+
+        init(state: MLState, stateNames: Set<String>) {
+            self.state = state
+            self.stateNames = stateNames
+            super.init()
+        }
+    }
+
     @_cdecl("cm_state_runtime_supported")
     public func cm_state_runtime_supported() -> Bool {
         if #available(macOS 15.0, *) {
@@ -28,12 +107,12 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
         }
         if #available(macOS 15.0, *) {
             let model: MLModel = cm_borrow(modelPtr)
-            guard let unmanagedState = model.perform(NSSelectorFromString("newState")),
-                  let state = unmanagedState.takeUnretainedValue() as? MLState else {
-                cm_write_error(errorOut, "model did not vend an MLState instance")
+            let stateNames = Set(model.modelDescription.stateDescriptionsByName.keys)
+            guard !stateNames.isEmpty else {
+                cm_write_error(errorOut, "model declares no state features")
                 return CM_STATE_FAILED
             }
-            outState.pointee = cm_retain(state)
+            outState.pointee = cm_retain(CMStateBox(state: model.makeState(), stateNames: stateNames))
             return CM_OK
         }
         cm_write_error(errorOut, "MLState requires macOS 15.0+")
@@ -57,10 +136,12 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
         if #available(macOS 15.0, *) {
             let model: MLModel = cm_borrow(modelPtr)
             let inputs: CMFeatureProviderBox = cm_borrow(inputsPtr)
-            let state: MLState = cm_borrow(statePtr)
+            let box: CMStateBox = cm_borrow(statePtr)
             do {
                 let options = try cm_make_prediction_options(from: predictionOptionsJson)
-                let output = try model.prediction(from: inputs, using: state, options: options)
+                let output = try box.gate.withThreadAccess {
+                    try model.prediction(from: inputs, using: box.state, options: options)
+                }
                 outProvider.pointee = cm_retain(CMFeatureProviderBox(provider: output))
                 return CM_OK
             } catch {
@@ -81,31 +162,39 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
         _ callback: @escaping CMModelAsyncCallback,
         _ refcon: UnsafeMutableRawPointer?
     ) {
-        let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
+        let callbackBox = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
         guard let modelPtr, let inputsPtr, let statePtr else {
-            box.fail(status: CM_INVALID_ARGUMENT, message: "model, inputs, and state must not be null")
+            callbackBox.fail(status: CM_INVALID_ARGUMENT, message: "model, inputs, and state must not be null")
             return
         }
         if #available(macOS 15.0, *) {
             let model: MLModel = cm_borrow(modelPtr)
-            let inputs: CMFeatureProviderBox = cm_borrow(inputsPtr)
-            let state: MLState = cm_borrow(statePtr)
+            let inputs = (cm_borrow(inputsPtr) as CMFeatureProviderBox).snapshot()
+            let box: CMStateBox = cm_borrow(statePtr)
             do {
                 let options = try cm_make_prediction_options(from: predictionOptionsJson)
                 Task {
+                    await box.gate.acquireForTask()
+                    let result: Result<any MLFeatureProvider, Error>
                     do {
-                        let output = try await model.prediction(from: inputs, using: state, options: options)
-                        box.succeed(cm_retain(CMFeatureProviderBox(provider: output)))
+                        result = .success(try await model.prediction(from: inputs, using: box.state, options: options))
                     } catch {
-                        box.fail(error: error, fallback: CM_STATE_FAILED)
+                        result = .failure(error)
+                    }
+                    box.gate.releaseFromTask()
+                    switch result {
+                    case let .success(output):
+                        callbackBox.succeed(cm_retain(CMFeatureProviderBox(provider: output)))
+                    case let .failure(error):
+                        callbackBox.fail(error: error, fallback: CM_STATE_FAILED)
                     }
                 }
             } catch {
-                box.fail(error: error, fallback: CM_STATE_FAILED)
+                callbackBox.fail(error: error, fallback: CM_STATE_FAILED)
             }
             return
         }
-        box.fail(status: CM_UNSUPPORTED, message: "MLState requires macOS 15.0+")
+        callbackBox.fail(status: CM_UNSUPPORTED, message: "MLState requires macOS 15.0+")
     }
 
     @_cdecl("cm_state_with_multi_array")
@@ -121,9 +210,16 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
             return CM_INVALID_ARGUMENT
         }
         if #available(macOS 15.0, *) {
-            let state: MLState = cm_borrow(statePtr)
-            state.withMultiArray(for: String(cString: namePtr)) { buffer in
-                callback(Unmanaged.passUnretained(buffer).toOpaque(), context)
+            let box: CMStateBox = cm_borrow(statePtr)
+            let stateName = String(cString: namePtr)
+            guard box.stateNames.contains(stateName) else {
+                cm_write_error(errorOut, "model declares no state named '\(stateName)'")
+                return CM_INVALID_ARGUMENT
+            }
+            box.gate.withThreadAccess {
+                box.state.withMultiArray(for: stateName) { buffer in
+                    callback(Unmanaged.passUnretained(buffer).toOpaque(), context)
+                }
             }
             return CM_OK
         }

@@ -366,7 +366,7 @@ impl Model {
     pub fn predict_with_state(
         &self,
         inputs: &FeatureProvider,
-        state: &MLState,
+        state: &mut MLState,
     ) -> Result<FeatureProvider, CoreMLError> {
         let options = PredictionOptions::default();
         self.predict_with_state_and_options(inputs, state, &options)
@@ -380,7 +380,7 @@ impl Model {
     pub fn predict_with_state_and_options(
         &self,
         inputs: &FeatureProvider,
-        state: &MLState,
+        state: &mut MLState,
         options: &PredictionOptions,
     ) -> Result<FeatureProvider, CoreMLError> {
         let options_json = options.as_json_c_string()?;
@@ -415,7 +415,7 @@ impl Model {
     pub async fn predict_with_state_async(
         &self,
         inputs: &FeatureProvider,
-        state: &MLState,
+        state: &mut MLState,
         options: Option<&PredictionOptions>,
     ) -> Result<FeatureProvider, CoreMLError> {
         let default_options = PredictionOptions::default();
