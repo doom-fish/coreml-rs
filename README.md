@@ -28,7 +28,7 @@ Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com
 
 ```toml
 [dependencies]
-coreml = "0.3.4"
+coreml = "0.4.0"
 ```
 
 ## Async API
@@ -38,7 +38,7 @@ loading/compilation and one-shot prediction:
 
 ```toml
 [dependencies]
-coreml = { version = "0.3.4", features = ["async"] }
+coreml = { version = "0.4.0", features = ["async"] }
 ```
 
 This covers `Model::load_async`, `ModelCompiler::compile_async`,

@@ -1,5 +1,67 @@
 # Changelog
 
+All notable changes to `coreml` are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.4.0] - Unreleased
+
+### Security
+
+- `MultiArray::data_type` no longer reports unknown element types as `Float32`. An `Int8` (macOS 26) model output read as `f32` spanned four times its storage, an out-of-bounds read and write from safe code.
+- `FeatureProvider::get_multi_array` and `Feature::multi_array_value` no longer return a new owning wrapper around the same `MLMultiArray` on every call, which let safe code hold `&mut` and `&` to one buffer.
+- A panicking custom-layer callback no longer releases CoreML's lent arrays a second time (use-after-free); this completes the 0.3.5 fix.
+- The compute-plan and model-structure bridges no longer read the caller's path inside an escaping Swift task after the call has returned.
+
+### Fixed
+
+- Multi-array access runs inside `getBytesWithHandler` / `getMutableBytesWithHandler` instead of long-lived slices over the deprecated `dataPointer`; every offset is bounds-checked and follows the strides the handler reports.
+- `MLState::snapshot_multi_array` copies strided state buffers element by element instead of `count` elements linearly.
+- `Model::new_state` no longer leaks every `MLState` and its buffers.
+- Stateful predictions on one `MLState` are serialized, and buffer access waits for predictions still in flight, including those of dropped futures.
+- Custom layer and custom model instances are locked instead of being cast to `&mut` from concurrent CoreML threads.
+- `Update::run` returns the updated model, delivers progress callbacks, and no longer cancels training after a fixed 60 s.
+- The blocking wrappers over CoreML's async APIs no longer fail after a fixed 60 s while the work keeps running; a configured timeout cancels the work and reports `TimedOut`.
+- Dropping an async future cancels its CoreML task, and async predictions work on a snapshot of the input provider.
+- `FeatureProvider::insert_*` report an interior NUL as an error instead of panicking.
+- `MultiArray::transfer_to` and `concatenate` validate shapes and element types before the Objective-C call.
+- `copy_from_slice` takes the logical element count; the old `copy_from_*_slice` required the padded storage length.
+- `Model::description` and `detailed_description` report serialization and decode errors instead of returning an empty description.
+- Temporary `.mlmodelc` bundles are removed: `compile_and_load(_async)` models delete theirs when dropped, and bundles that arrive after a timeout or for a dropped compile future are deleted.
+- Paths that are not valid UTF-8 are rejected instead of being converted lossily.
+- New multi-arrays are zero-filled.
+- The custom-layer and custom-model integration tests run again.
+
+### Changed
+
+- **Breaking:** `DataType` gains `Int8` and `Unknown(i64)`, and `MultiArrayScalar` gains `Int8`; both are `#[non_exhaustive]`.
+- **Breaking:** `MultiArray` dereferences to `MultiArrayRef`. The per-type `as_*_slice(_mut)`, `get_*`, `set_*` and `copy_from_*_slice` methods are replaced by generic `with_slice(_mut)`, `with_bytes(_mut)`, `get`, `set`, `to_vec` and `copy_from_slice` over `MultiArrayElement` (`f64`, `f32`, `f16`, `i32`, `i8`); `get` returns a `Result`.
+- **Breaking:** `MultiArray::concatenate` takes `&[impl AsRef<MultiArrayRef>]` and `transfer_to` takes `&mut MultiArrayRef`.
+- **Breaking:** `FeatureProvider::get_multi_array` and `Feature::multi_array_value` return `MultiArrayView<'_>`.
+- **Breaking:** `MLCustomLayer::evaluate_on_cpu` and `MLCustomLayerHandle::evaluate_on_cpu` take `&[&MultiArrayRef]` and `&mut [&mut MultiArrayRef]`.
+- **Breaking:** `Model::predict_with_state`, `predict_with_state_and_options` and `predict_with_state_async` take `&mut MLState`.
+- **Breaking:** `Update::run` takes the handlers by value plus a `timeout: Option<Duration>` and returns `UpdateOutcome { model, result }`; `UpdateProgressHandlers` has a lifetime and no longer implements `Clone`, `PartialEq` or serde.
+- **Breaking:** `FeatureProvider::insert_*` and `Model::description` / `detailed_description` return `Result`.
+- **Breaking:** raw FFI: multi-array data types cross as `NSInteger`; the async exports return a cancellable task handle; the blocking exports take a timeout; `cm_update_run` is replaced by `cm_update_start` / `cm_update_cancel` and `cm_state_snapshot_multi_array` by `cm_state_with_multi_array`.
+- `doom-fish-utils` is a regular dependency. Requires `apple-cf` 0.11 and `doom-fish-utils` 0.4.1; `rust-version` is 1.82.
+
+### Added
+
+- `MultiArrayRef`, `MultiArrayView`, `MultiArrayElement`, `DataType::element_size` and `MultiArrayRef::copy_to_owned`.
+- `MLState::with_multi_array` and `with_multi_array_mut`.
+- `UpdateProgressHandlers::on_progress` and `UpdateOutcome`.
+- `set_blocking_timeout` and `blocking_timeout`.
+
+### Removed
+
+- `FeatureProvider::try_insert_*`; use `insert_*`.
+- The raw `cm_multi_array_data_pointer` export.
+
+## [0.3.5] - 2026-06-06
+
+- Size raw multi-array slices to the strided storage extent, and stop double-releasing feature providers and arrays lent to custom-model and custom-layer callbacks.
+
 ## [0.3.4] - 2026-05-20
 
 - Phase 32 completeness + async sweep.

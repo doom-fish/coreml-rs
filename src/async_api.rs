@@ -5,7 +5,7 @@
 //! [`Model::predict_with_state_async`].
 //!
 //! ```toml
-//! coreml = { version = "0.3", features = ["async"] }
+//! coreml = { version = "0.4", features = ["async"] }
 //! ```
 //!
 //! The async wrappers are executor-agnostic and can be awaited on any runtime.
