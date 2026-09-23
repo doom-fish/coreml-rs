@@ -100,7 +100,7 @@ impl MLCustomModelRegistration {
 
         let mut error = ptr::null_mut();
         let status =
-            unsafe { ffi::cm_custom_model_register_class(class_name_c.as_ptr(), &mut error) };
+            unsafe { ffi::cm_custom_model_register_class(class_name_c.as_ptr(), &raw mut error) };
         if status != ffi::status::OK {
             return Err(from_swift(status, error));
         }
@@ -144,8 +144,8 @@ impl MLCustomModelRegistration {
             ffi::cm_custom_model_create(
                 class_name.as_ptr(),
                 parameters_json.as_ptr(),
-                &mut model,
-                &mut error,
+                &raw mut model,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || model.is_null() {
@@ -199,8 +199,8 @@ impl MLCustomModelHandle {
                 self.ptr,
                 input.ptr,
                 options_json.as_ptr(),
-                &mut output,
-                &mut error,
+                &raw mut output,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || output.is_null() {
@@ -232,8 +232,8 @@ impl MLCustomModelHandle {
                 self.ptr,
                 input_batch.ptr,
                 options_json.as_ptr(),
-                &mut output,
-                &mut error,
+                &raw mut output,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || output.is_null() {

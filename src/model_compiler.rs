@@ -35,7 +35,7 @@ impl ModelCompiler {
         let mut error = ptr::null_mut();
         let mut compiled_path = ptr::null_mut();
         let status =
-            unsafe { ffi::cm_model_compile(path.as_ptr(), &mut compiled_path, &mut error) };
+            unsafe { ffi::cm_model_compile(path.as_ptr(), &raw mut compiled_path, &raw mut error) };
         if status != ffi::status::OK || compiled_path.is_null() {
             return Err(from_swift(status, error));
         }

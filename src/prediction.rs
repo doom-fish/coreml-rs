@@ -46,7 +46,7 @@ impl PredictionOptions {
         let json = self.as_json_c_string()?;
         let mut error = std::ptr::null_mut();
         let snapshot =
-            unsafe { ffi::cm_prediction_options_snapshot_json(json.as_ptr(), &mut error) };
+            unsafe { ffi::cm_prediction_options_snapshot_json(json.as_ptr(), &raw mut error) };
         if snapshot.is_null() {
             return Err(from_swift(ffi::status::PREDICTION_FAILED, error));
         }

@@ -110,7 +110,7 @@ impl MLCustomLayerRegistration {
 
         let mut error = ptr::null_mut();
         let status =
-            unsafe { ffi::cm_custom_layer_register_class(class_name_c.as_ptr(), &mut error) };
+            unsafe { ffi::cm_custom_layer_register_class(class_name_c.as_ptr(), &raw mut error) };
         if status != ffi::status::OK {
             return Err(from_swift(status, error));
         }
@@ -154,8 +154,8 @@ impl MLCustomLayerRegistration {
             ffi::cm_custom_layer_create(
                 class_name.as_ptr(),
                 parameters_json.as_ptr(),
-                &mut layer,
-                &mut error,
+                &raw mut layer,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || layer.is_null() {
@@ -215,7 +215,7 @@ impl MLCustomLayerHandle {
                 weight_ptrs.as_ptr(),
                 weight_lengths.as_ptr(),
                 weights.len(),
-                &mut error,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK {
@@ -240,8 +240,8 @@ impl MLCustomLayerHandle {
             ffi::cm_custom_layer_output_shapes_json(
                 self.ptr,
                 input_shapes_json.as_ptr(),
-                &mut output_json,
-                &mut error,
+                &raw mut output_json,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || output_json.is_null() {
@@ -283,7 +283,7 @@ impl MLCustomLayerHandle {
                 input_ptrs.len(),
                 output_ptrs.as_ptr(),
                 output_ptrs.len(),
-                &mut error,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK {

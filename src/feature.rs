@@ -207,7 +207,7 @@ impl Feature {
                 pixels_high,
                 pixel_format_type,
                 options_json.as_ptr(),
-                &mut error,
+                &raw mut error,
             )
         };
         if ptr.is_null() {
@@ -251,7 +251,7 @@ impl Feature {
                 key_ptrs.as_ptr(),
                 values.as_ptr(),
                 values.len(),
-                &mut error,
+                &raw mut error,
             )
         };
         if ptr.is_null() {
@@ -270,7 +270,7 @@ impl Feature {
                 keys.as_ptr(),
                 values.as_ptr(),
                 values.len(),
-                &mut error,
+                &raw mut error,
             )
         };
         if ptr.is_null() {
@@ -296,14 +296,14 @@ impl Feature {
     #[must_use]
     pub fn int64_value(&self) -> Option<i64> {
         let mut out = 0_i64;
-        unsafe { ffi::cm_feature_get_int64(self.ptr, &mut out) }.then_some(out)
+        unsafe { ffi::cm_feature_get_int64(self.ptr, &raw mut out) }.then_some(out)
     }
 
     /// Retrieve the `Double` value when present.
     #[must_use]
     pub fn double_value(&self) -> Option<f64> {
         let mut out = 0.0_f64;
-        unsafe { ffi::cm_feature_get_double(self.ptr, &mut out) }.then_some(out)
+        unsafe { ffi::cm_feature_get_double(self.ptr, &raw mut out) }.then_some(out)
     }
 
     /// Retrieve the `String` value when present.

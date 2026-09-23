@@ -186,7 +186,7 @@ impl FeatureProvider {
     pub fn get_int64(&self, name: &str) -> Option<i64> {
         let name = CString::new(name).ok()?;
         let mut out = 0_i64;
-        unsafe { ffi::cm_feature_provider_get_int64(self.ptr, name.as_ptr(), &mut out) }
+        unsafe { ffi::cm_feature_provider_get_int64(self.ptr, name.as_ptr(), &raw mut out) }
             .then_some(out)
     }
 
@@ -195,7 +195,7 @@ impl FeatureProvider {
     pub fn get_double(&self, name: &str) -> Option<f64> {
         let name = CString::new(name).ok()?;
         let mut out = 0.0_f64;
-        unsafe { ffi::cm_feature_provider_get_double(self.ptr, name.as_ptr(), &mut out) }
+        unsafe { ffi::cm_feature_provider_get_double(self.ptr, name.as_ptr(), &raw mut out) }
             .then_some(out)
     }
 

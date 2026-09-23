@@ -22,7 +22,7 @@ impl MLSequence {
     pub fn empty(feature_type: FeatureType) -> Result<Self, CoreMLError> {
         validate_feature_type(feature_type)?;
         let mut error = ptr::null_mut();
-        let ptr = unsafe { ffi::cm_sequence_new_empty(feature_type.as_ffi(), &mut error) };
+        let ptr = unsafe { ffi::cm_sequence_new_empty(feature_type.as_ffi(), &raw mut error) };
         if ptr.is_null() {
             return Err(from_swift(ffi::status::FEATURE_PROVIDER_FAILED, error));
         }
@@ -47,7 +47,7 @@ impl MLSequence {
         let pointers: Vec<*const i8> = strings.iter().map(|value| value.as_ptr()).collect();
         let mut error = ptr::null_mut();
         let ptr =
-            unsafe { ffi::cm_sequence_new_strings(pointers.as_ptr(), pointers.len(), &mut error) };
+            unsafe { ffi::cm_sequence_new_strings(pointers.as_ptr(), pointers.len(), &raw mut error) };
         if ptr.is_null() {
             return Err(from_swift(ffi::status::FEATURE_PROVIDER_FAILED, error));
         }
@@ -61,7 +61,7 @@ impl MLSequence {
     /// Returns an error if CoreML rejects the values.
     pub fn from_int64s(values: &[i64]) -> Result<Self, CoreMLError> {
         let mut error = ptr::null_mut();
-        let ptr = unsafe { ffi::cm_sequence_new_int64s(values.as_ptr(), values.len(), &mut error) };
+        let ptr = unsafe { ffi::cm_sequence_new_int64s(values.as_ptr(), values.len(), &raw mut error) };
         if ptr.is_null() {
             return Err(from_swift(ffi::status::FEATURE_PROVIDER_FAILED, error));
         }

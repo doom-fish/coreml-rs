@@ -55,8 +55,8 @@ impl Model {
             ffi::cm_model_load(
                 path.as_ptr(),
                 configuration_json.as_ptr(),
-                &mut model,
-                &mut error,
+                &raw mut model,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || model.is_null() {
@@ -120,8 +120,8 @@ impl Model {
                 specification.as_ptr(),
                 specification.len(),
                 configuration_json.as_ptr(),
-                &mut model,
-                &mut error,
+                &raw mut model,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || model.is_null() {
@@ -263,8 +263,8 @@ impl Model {
                 self.ptr,
                 inputs.ptr,
                 options_json.as_ptr(),
-                &mut out,
-                &mut error,
+                &raw mut out,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || out.is_null() {
@@ -303,8 +303,8 @@ impl Model {
                 self.ptr,
                 inputs.ptr,
                 options_json.as_ptr(),
-                &mut out,
-                &mut error,
+                &raw mut out,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || out.is_null() {
@@ -323,7 +323,7 @@ impl Model {
     pub fn available_compute_devices() -> Result<Vec<ComputeDevice>, CoreMLError> {
         let mut error = ptr::null_mut();
         let mut json = ptr::null_mut();
-        let status = unsafe { ffi::cm_model_available_compute_devices_json(&mut json, &mut error) };
+        let status = unsafe { ffi::cm_model_available_compute_devices_json(&raw mut json, &raw mut error) };
         decode_device_list(status, json, error)
     }
 
@@ -335,7 +335,7 @@ impl Model {
     pub fn write_to_url(&self, path: impl AsRef<Path>) -> Result<(), CoreMLError> {
         let path = path_to_c_string(path)?;
         let mut error = ptr::null_mut();
-        let status = unsafe { ffi::cm_model_write_to_url(self.ptr, path.as_ptr(), &mut error) };
+        let status = unsafe { ffi::cm_model_write_to_url(self.ptr, path.as_ptr(), &raw mut error) };
         if status != ffi::status::OK {
             return Err(from_swift(status, error));
         }
@@ -350,7 +350,7 @@ impl Model {
     pub fn new_state(&self) -> Result<MLState, CoreMLError> {
         let mut error = ptr::null_mut();
         let mut state = ptr::null_mut();
-        let status = unsafe { ffi::cm_model_new_state(self.ptr, &mut state, &mut error) };
+        let status = unsafe { ffi::cm_model_new_state(self.ptr, &raw mut state, &raw mut error) };
         if status != ffi::status::OK || state.is_null() {
             return Err(from_swift(status, error));
         }
@@ -392,8 +392,8 @@ impl Model {
                 inputs.ptr,
                 state.ptr,
                 options_json.as_ptr(),
-                &mut out,
-                &mut error,
+                &raw mut out,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || out.is_null() {

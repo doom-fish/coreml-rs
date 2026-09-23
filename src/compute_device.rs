@@ -42,7 +42,7 @@ pub struct ComputeDevice {
 pub fn all_compute_devices() -> Result<Vec<ComputeDevice>, CoreMLError> {
     let mut error = ptr::null_mut();
     let mut json = ptr::null_mut();
-    let status = unsafe { ffi::cm_all_compute_devices_json(&mut json, &mut error) };
+    let status = unsafe { ffi::cm_all_compute_devices_json(&raw mut json, &raw mut error) };
     decode_device_list(status, json, error)
 }
 

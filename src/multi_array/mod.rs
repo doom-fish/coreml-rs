@@ -137,8 +137,8 @@ impl MultiArray {
                 shape_i64.as_ptr(),
                 shape_i64.len(),
                 data_type.as_ffi(),
-                &mut out,
-                &mut error,
+                &raw mut out,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || out.is_null() {
@@ -194,8 +194,8 @@ impl MultiArray {
                 ptrs.len(),
                 axis as isize,
                 data_type.as_ffi(),
-                &mut out,
-                &mut error,
+                &raw mut out,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || out.is_null() {
@@ -212,7 +212,7 @@ impl MultiArray {
     pub fn transfer_to(&self, destination: &mut Self) -> Result<(), CoreMLError> {
         let mut error = ptr::null_mut();
         let status =
-            unsafe { ffi::cm_multi_array_transfer_to(self.ptr, destination.ptr, &mut error) };
+            unsafe { ffi::cm_multi_array_transfer_to(self.ptr, destination.ptr, &raw mut error) };
         if status != ffi::status::OK {
             return Err(from_swift(status, error));
         }

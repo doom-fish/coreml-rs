@@ -185,8 +185,8 @@ fn load_compute_plan_json(
         ffi::cm_compute_plan_load_summary(
             path.as_ptr(),
             configuration_json.as_ptr(),
-            &mut summary,
-            &mut error,
+            &raw mut summary,
+            &raw mut error,
         )
     };
     if status != ffi::status::OK || summary.is_null() {

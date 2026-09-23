@@ -37,8 +37,8 @@ impl MLState {
             ffi::cm_state_snapshot_multi_array(
                 self.ptr,
                 state_name.as_ptr(),
-                &mut array,
-                &mut error,
+                &raw mut array,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || array.is_null() {

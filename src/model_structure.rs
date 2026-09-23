@@ -64,7 +64,7 @@ impl ModelStructure {
         let mut error = ptr::null_mut();
         let mut json = ptr::null_mut();
         let status =
-            unsafe { ffi::cm_model_structure_load_json(path.as_ptr(), &mut json, &mut error) };
+            unsafe { ffi::cm_model_structure_load_json(path.as_ptr(), &raw mut json, &raw mut error) };
         if status != ffi::status::OK || json.is_null() {
             return Err(from_swift(status, error));
         }

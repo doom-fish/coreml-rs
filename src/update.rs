@@ -159,8 +159,8 @@ impl Update {
                 training_data.ptr,
                 configuration_json.as_ptr(),
                 handlers_json.as_ptr(),
-                &mut result_json,
-                &mut error,
+                &raw mut result_json,
+                &raw mut error,
             )
         };
         if status != ffi::status::OK || result_json.is_null() {
