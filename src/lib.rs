@@ -93,7 +93,8 @@ pub use multi_array::{
 };
 pub use prediction::{PredictionOptions, PredictionOptionsBridgeSnapshot};
 pub use update::{
-    Update, UpdateContext, UpdateEvent, UpdateProgressHandlers, UpdateResult, UpdateTaskState,
+    Update, UpdateContext, UpdateEvent, UpdateOutcome, UpdateProgressHandlers, UpdateResult,
+    UpdateTaskState,
 };
 
 /// Common imports for users of this crate.
@@ -145,6 +146,7 @@ pub mod prelude {
     };
     pub use crate::prediction::{PredictionOptions, PredictionOptionsBridgeSnapshot};
     pub use crate::update::{
-        Update, UpdateContext, UpdateEvent, UpdateProgressHandlers, UpdateResult, UpdateTaskState,
+        Update, UpdateContext, UpdateEvent, UpdateOutcome, UpdateProgressHandlers, UpdateResult,
+        UpdateTaskState,
     };
 }

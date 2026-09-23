@@ -24,6 +24,10 @@ final class CMBatchProviderBox: NSObject, MLBatchProvider {
     func features(at index: Int) -> any MLFeatureProvider {
         items[index]
     }
+
+    func snapshot() -> CMBatchProviderBox {
+        CMBatchProviderBox(items: items.map { $0.snapshot() })
+    }
 }
 
 @_cdecl("cm_batch_provider_count")

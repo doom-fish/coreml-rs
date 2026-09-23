@@ -1,6 +1,18 @@
 import CoreML
 import Foundation
 
+public typealias CMUpdateEventCallback = @convention(c) (
+    UnsafeMutableRawPointer?,
+    Int32,
+    UnsafePointer<CChar>?,
+    UnsafeMutableRawPointer?
+) -> Void
+
+public typealias CMContextReleaseCallback = @convention(c) (UnsafeMutableRawPointer?) -> Void
+
+let CM_UPDATE_EVENT_PROGRESS: Int32 = 0
+let CM_UPDATE_EVENT_COMPLETION: Int32 = 1
+
 func cm_update_events(from jsonPtr: UnsafePointer<CChar>?) throws -> MLUpdateProgressEvent {
     let object = try cm_json_object(from: jsonPtr)
     let names = object["interested_events"] as? [String] ?? []
@@ -57,16 +69,44 @@ func cm_update_context_object(
     ]
 }
 
-@_cdecl("cm_update_run")
-public func cm_update_run(
+final class CMUpdateSink: @unchecked Sendable {
+    private let callback: CMUpdateEventCallback
+    private let context: UnsafeMutableRawPointer?
+    private let release: CMContextReleaseCallback
+
+    init(
+        callback: @escaping CMUpdateEventCallback,
+        context: UnsafeMutableRawPointer?,
+        release: @escaping CMContextReleaseCallback
+    ) {
+        self.callback = callback
+        self.context = context
+        self.release = release
+    }
+
+    deinit {
+        release(context)
+    }
+
+    func deliver(_ kind: Int32, _ object: [String: Any], model: UnsafeMutableRawPointer?) {
+        cm_json_string(object).withCString { callback(context, kind, $0, model) }
+    }
+}
+
+@_cdecl("cm_update_start")
+public func cm_update_start(
     _ modelPathPtr: UnsafePointer<CChar>?,
     _ trainingDataPtr: UnsafeMutableRawPointer?,
     _ configurationJson: UnsafePointer<CChar>?,
     _ handlersJson: UnsafePointer<CChar>?,
-    _ outResultJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+    _ callback: @escaping CMUpdateEventCallback,
+    _ context: UnsafeMutableRawPointer?,
+    _ release: @escaping CMContextReleaseCallback,
+    _ outTask: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
     _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 ) -> Int32 {
-    outResultJson.pointee = nil
+    outTask.pointee = nil
+    let sink = CMUpdateSink(callback: callback, context: context, release: release)
     guard let modelPathPtr, let trainingDataPtr else {
         cm_write_error(errorOut, "update task requires a model path and training data")
         return CM_INVALID_ARGUMENT
@@ -75,18 +115,19 @@ public func cm_update_run(
     do {
         let configuration = try cm_make_configuration(from: configurationJson)
         let events = try cm_update_events(from: handlersJson)
-        let trainingData: CMBatchProviderBox = cm_borrow(trainingDataPtr)
-        var contexts: [[String: Any]] = []
-        let semaphore = DispatchSemaphore(value: 0)
-
+        let trainingData = (cm_borrow(trainingDataPtr) as CMBatchProviderBox).snapshot()
         let progressHandlers = MLUpdateProgressHandlers(
             forEvents: events,
             progressHandler: { context in
-                contexts.append(cm_update_context_object(context))
+                sink.deliver(CM_UPDATE_EVENT_PROGRESS, cm_update_context_object(context), model: nil)
             },
             completionHandler: { context in
-                contexts.append(cm_update_context_object(context, eventOverride: "completion"))
-                semaphore.signal()
+                let model = context.task.error == nil ? cm_retain(context.model) : nil
+                sink.deliver(
+                    CM_UPDATE_EVENT_COMPLETION,
+                    cm_update_context_object(context, eventOverride: "completion"),
+                    model: model
+                )
             }
         )
 
@@ -96,26 +137,20 @@ public func cm_update_run(
             configuration: configuration,
             progressHandlers: progressHandlers
         )
+        outTask.pointee = cm_retain(task)
         task.resume()
-
-        if semaphore.wait(timeout: .now() + .seconds(60)) == .timedOut {
-            task.cancel()
-            cm_write_error(errorOut, "timed out waiting for CoreML update task completion")
-            return CM_TIMED_OUT
-        }
-
-        if task.state == .failed {
-            cm_write_error(errorOut, task.error?.localizedDescription ?? "CoreML update task failed")
-            return CM_UPDATE_FAILED
-        }
-
-        outResultJson.pointee = cm_string(cm_json_string([
-            "final_state": cm_task_state_name(task.state),
-            "contexts": contexts,
-        ]))
         return CM_OK
     } catch {
         cm_write_error(errorOut, error.localizedDescription)
         return cm_status_code(for: error, fallback: CM_UPDATE_FAILED)
+    }
+}
+
+@_cdecl("cm_update_cancel")
+public func cm_update_cancel(_ taskPtr: UnsafeMutableRawPointer?) {
+    guard let taskPtr else { return }
+    let task: MLUpdateTask = cm_borrow(taskPtr)
+    if task.state == .running || task.state == .suspended {
+        task.cancel()
     }
 }

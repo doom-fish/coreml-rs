@@ -5,7 +5,7 @@ use core::ffi::c_char;
 use core::ffi::c_void;
 use std::ffi::CString;
 use std::path::Path;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 #[cfg(feature = "async")]
 use doom_fish_utils::completion::{error_from_cstr, AsyncCompletion};
@@ -435,6 +435,12 @@ impl Model {
         future
             .await
             .map_err(|payload| decode_async_error(payload, ffi::status::STATE_FAILED))
+    }
+}
+
+impl Model {
+    pub(crate) unsafe fn from_retained(ptr: NonNull<c_void>) -> Self {
+        Self { ptr: ptr.as_ptr() }
     }
 }
 
