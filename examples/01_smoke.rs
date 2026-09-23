@@ -14,10 +14,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let expected_tensor = array.to_vec::<f32>()?;
 
     let mut inputs = FeatureProvider::new();
-    inputs.insert_multi_array("tensor", array);
-    inputs.insert_string("label", "doom fish");
-    inputs.insert_int64("count", 42);
-    inputs.insert_double("score", 0.5);
+    inputs.insert_multi_array("tensor", array)?;
+    inputs.insert_string("label", "doom fish")?;
+    inputs.insert_int64("count", 42)?;
+    inputs.insert_double("score", 0.5)?;
 
     assert_eq!(
         inputs.keys(),

@@ -2,7 +2,7 @@ use coreml::prelude::*;
 
 fn main() {
     let mut provider = FeatureProvider::new();
-    provider.insert_double("score", 0.5);
+    provider.insert_double("score", 0.5).expect("feature should insert");
     let batch = BatchProvider::from_feature_providers(vec![provider]);
     let handlers = UpdateProgressHandlers::all();
     let error = Update::run(

@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tensor.copy_from_slice(&pixels)?;
 
     let mut inputs = FeatureProvider::new();
-    inputs.insert_multi_array("image", tensor);
+    inputs.insert_multi_array("image", tensor)?;
 
     let options = PredictionOptions::new().with_uses_cpu_only(false);
     let outputs = model.predict_with_options(&inputs, &options)?;

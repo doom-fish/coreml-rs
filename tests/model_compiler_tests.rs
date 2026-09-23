@@ -22,7 +22,7 @@ fn compile_and_load_removes_its_temporary_bundle_with_the_model() {
         .expect("compile and load should succeed");
     assert_eq!(common::temporary_bundles(&stem), 1);
     let mut inputs = FeatureProvider::new();
-    inputs.insert_string("text", "I love this product");
+    inputs.insert_string("text", "I love this product").unwrap();
     assert_eq!(
         model.predict(&inputs).unwrap().get_string("label").as_deref(),
         Some("positive")

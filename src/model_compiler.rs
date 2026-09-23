@@ -173,7 +173,11 @@ extern "C" fn model_compile_async_callback(
 }
 
 fn path_to_c_string(path: impl AsRef<Path>) -> Result<CString, CoreMLError> {
-    CString::new(path.as_ref().to_string_lossy().into_owned()).map_err(|error| {
+    let path = path.as_ref();
+    let path = path.to_str().ok_or_else(|| {
+        CoreMLError::InvalidArgument(format!("path is not valid UTF-8: {}", path.display()))
+    })?;
+    CString::new(path).map_err(|error| {
         CoreMLError::InvalidArgument(format!("path contains an interior NUL byte: {error}"))
     })
 }

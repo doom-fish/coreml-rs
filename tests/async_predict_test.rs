@@ -13,7 +13,7 @@ fn async_predict_compiled_model_succeeds() -> Result<(), Box<dyn Error>> {
 
     let model = pollster::block_on(Model::load_async(compiled.as_path(), None))?;
     let mut inputs = FeatureProvider::new();
-    inputs.insert_string("text", "I love this product");
+    inputs.insert_string("text", "I love this product").unwrap();
 
     let outputs = pollster::block_on(model.predict_async(&inputs, None))?;
     assert_eq!(outputs.get_string("label").as_deref(), Some("positive"));

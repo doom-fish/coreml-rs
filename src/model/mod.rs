@@ -194,23 +194,23 @@ impl Model {
     }
 
     /// Snapshot the model description.
-    #[must_use]
-    pub fn description(&self) -> ModelDescription {
-        let json = unsafe { ffi::cm_model_description_json(self.ptr) };
-        if json.is_null() {
-            return ModelDescription::default();
-        }
-        ModelDescription::from_json_str(&take_owned_c_string(json)).unwrap_or_default()
+    pub fn description(&self) -> Result<ModelDescription, CoreMLError> {
+        ModelDescription::from_json_str(&self.description_json()?)
     }
 
     /// Snapshot the richer model description, including flexible image and tensor constraints.
-    #[must_use]
-    pub fn detailed_description(&self) -> DetailedModelDescription {
+    pub fn detailed_description(&self) -> Result<DetailedModelDescription, CoreMLError> {
+        DetailedModelDescription::from_json_str(&self.description_json()?)
+    }
+
+    fn description_json(&self) -> Result<String, CoreMLError> {
         let json = unsafe { ffi::cm_model_description_json(self.ptr) };
         if json.is_null() {
-            return DetailedModelDescription::default();
+            return Err(CoreMLError::DescriptionFailed(
+                "CoreML could not serialize the model description".to_owned(),
+            ));
         }
-        DetailedModelDescription::from_json_str(&take_owned_c_string(json)).unwrap_or_default()
+        Ok(take_owned_c_string(json))
     }
 
     /// Run one synchronous prediction with default options.
@@ -475,8 +475,8 @@ impl Drop for Model {
 impl core::fmt::Debug for Model {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Model")
-            .field("description", &self.description())
-            .field("detailed_description", &self.detailed_description())
+            .field("description", &self.description().ok())
+            .field("detailed_description", &self.detailed_description().ok())
             .finish()
     }
 }
@@ -580,7 +580,11 @@ extern "C" fn model_predict_async_callback(
 }
 
 fn path_to_c_string(path: impl AsRef<Path>) -> Result<CString, CoreMLError> {
-    CString::new(path.as_ref().to_string_lossy().into_owned()).map_err(|error| {
+    let path = path.as_ref();
+    let path = path.to_str().ok_or_else(|| {
+        CoreMLError::InvalidArgument(format!("path is not valid UTF-8: {}", path.display()))
+    })?;
+    CString::new(path).map_err(|error| {
         CoreMLError::InvalidArgument(format!("path contains an interior NUL byte: {error}"))
     })
 }

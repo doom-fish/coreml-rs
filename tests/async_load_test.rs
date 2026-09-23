@@ -13,7 +13,7 @@ fn async_load_compiled_model_succeeds() -> Result<(), Box<dyn Error>> {
     let configuration = ModelConfiguration::new();
 
     let model = pollster::block_on(Model::load_async(compiled.as_path(), Some(&configuration)))?;
-    let description = model.description();
+    let description = model.description()?;
 
     assert_eq!(description.inputs.len(), 1);
     assert_eq!(description.inputs[0].name, "text");

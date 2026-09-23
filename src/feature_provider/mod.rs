@@ -25,47 +25,11 @@ impl FeatureProvider {
     }
 
     /// Insert a generic feature value.
-    pub fn insert_feature(&mut self, name: &str, value: &Feature) {
-        self.try_insert_feature(name, value)
-            .expect("failed to insert feature into feature provider");
-    }
-
-    /// Insert an `MLMultiArray` value.
-    pub fn insert_multi_array(&mut self, name: &str, value: MultiArray) {
-        self.try_insert_multi_array(name, value)
-            .expect("failed to insert MLMultiArray into feature provider");
-    }
-
-    /// Insert an image input from a `CVPixelBuffer`.
-    pub fn insert_cv_pixel_buffer(&mut self, name: &str, value: &CVPixelBuffer) {
-        self.try_insert_cv_pixel_buffer(name, value)
-            .expect("failed to insert CVPixelBuffer into feature provider");
-    }
-
-    /// Insert a string feature.
-    pub fn insert_string(&mut self, name: &str, value: &str) {
-        self.try_insert_string(name, value)
-            .expect("failed to insert string into feature provider");
-    }
-
-    /// Insert an `Int64` feature.
-    pub fn insert_int64(&mut self, name: &str, value: i64) {
-        self.try_insert_int64(name, value)
-            .expect("failed to insert int64 into feature provider");
-    }
-
-    /// Insert a `Double` feature.
-    pub fn insert_double(&mut self, name: &str, value: f64) {
-        self.try_insert_double(name, value)
-            .expect("failed to insert double into feature provider");
-    }
-
-    /// Fallible variant of [`insert_feature`](Self::insert_feature).
     ///
     /// # Errors
     ///
     /// Returns an error when the feature name cannot cross the FFI boundary.
-    pub fn try_insert_feature(&mut self, name: &str, value: &Feature) -> Result<(), CoreMLError> {
+    pub fn insert_feature(&mut self, name: &str, value: &Feature) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
         let status = unsafe {
             ffi::cm_feature_provider_insert_feature(self.ptr, name.as_ptr(), value.as_ptr())
@@ -73,16 +37,12 @@ impl FeatureProvider {
         status_ok(status, "failed to insert feature")
     }
 
-    /// Fallible variant of [`insert_multi_array`](Self::insert_multi_array).
+    /// Insert an `MLMultiArray` value.
     ///
     /// # Errors
     ///
     /// Returns an error when the feature name cannot cross the FFI boundary.
-    pub fn try_insert_multi_array(
-        &mut self,
-        name: &str,
-        value: MultiArray,
-    ) -> Result<(), CoreMLError> {
+    pub fn insert_multi_array(&mut self, name: &str, value: MultiArray) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
         let status = unsafe {
             ffi::cm_feature_provider_insert_multi_array(self.ptr, name.as_ptr(), value.as_ptr())
@@ -90,12 +50,12 @@ impl FeatureProvider {
         status_ok(status, "failed to insert multi-array")
     }
 
-    /// Fallible variant of [`insert_cv_pixel_buffer`](Self::insert_cv_pixel_buffer).
+    /// Insert an image input from a `CVPixelBuffer`.
     ///
     /// # Errors
     ///
     /// Returns an error when the feature name cannot cross the FFI boundary.
-    pub fn try_insert_cv_pixel_buffer(
+    pub fn insert_cv_pixel_buffer(
         &mut self,
         name: &str,
         value: &CVPixelBuffer,
@@ -111,12 +71,12 @@ impl FeatureProvider {
         status_ok(status, "failed to insert pixel buffer")
     }
 
-    /// Fallible variant of [`insert_string`](Self::insert_string).
+    /// Insert a string feature.
     ///
     /// # Errors
     ///
     /// Returns an error when the feature name or value contains a NUL byte.
-    pub fn try_insert_string(&mut self, name: &str, value: &str) -> Result<(), CoreMLError> {
+    pub fn insert_string(&mut self, name: &str, value: &str) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
         let value = c_string(value, "feature value")?;
         let status = unsafe {
@@ -125,24 +85,24 @@ impl FeatureProvider {
         status_ok(status, "failed to insert string")
     }
 
-    /// Fallible variant of [`insert_int64`](Self::insert_int64).
+    /// Insert an `Int64` feature.
     ///
     /// # Errors
     ///
     /// Returns an error when the feature name contains a NUL byte.
-    pub fn try_insert_int64(&mut self, name: &str, value: i64) -> Result<(), CoreMLError> {
+    pub fn insert_int64(&mut self, name: &str, value: i64) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
         let status =
             unsafe { ffi::cm_feature_provider_insert_int64(self.ptr, name.as_ptr(), value) };
         status_ok(status, "failed to insert int64")
     }
 
-    /// Fallible variant of [`insert_double`](Self::insert_double).
+    /// Insert a `Double` feature.
     ///
     /// # Errors
     ///
     /// Returns an error when the feature name contains a NUL byte.
-    pub fn try_insert_double(&mut self, name: &str, value: f64) -> Result<(), CoreMLError> {
+    pub fn insert_double(&mut self, name: &str, value: f64) -> Result<(), CoreMLError> {
         let name = c_string(name, "feature name")?;
         let status =
             unsafe { ffi::cm_feature_provider_insert_double(self.ptr, name.as_ptr(), value) };

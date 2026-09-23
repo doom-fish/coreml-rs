@@ -16,8 +16,8 @@ fn labelled_points(points: &[(f64, f64, &str)]) -> BatchProvider {
     let mut batch = BatchProvider::new();
     for &(x, y, label) in points {
         let mut provider = FeatureProvider::new();
-        provider.insert_multi_array("features", point(x, y));
-        provider.insert_string("label", label);
+        provider.insert_multi_array("features", point(x, y)).unwrap();
+        provider.insert_string("label", label).unwrap();
         batch.push(provider);
     }
     batch
@@ -25,7 +25,7 @@ fn labelled_points(points: &[(f64, f64, &str)]) -> BatchProvider {
 
 fn predict_label(model: &Model, x: f64, y: f64) -> Option<String> {
     let mut input = FeatureProvider::new();
-    input.insert_multi_array("features", point(x, y));
+    input.insert_multi_array("features", point(x, y)).unwrap();
     model
         .predict(&input)
         .expect("prediction should succeed")
@@ -35,7 +35,7 @@ fn predict_label(model: &Model, x: f64, y: f64) -> Option<String> {
 #[test]
 fn update_missing_bundle_fails() {
     let mut provider = FeatureProvider::new();
-    provider.insert_double("score", 0.5);
+    provider.insert_double("score", 0.5).unwrap();
     let batch = BatchProvider::from_feature_providers(vec![provider]);
     let error = Update::run(
         "tests/does-not-exist.mlmodelc",

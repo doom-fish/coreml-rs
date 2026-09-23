@@ -4,7 +4,7 @@ use coreml::ml_dictionary_feature_provider::MLDictionaryFeatureProvider;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut provider = MLDictionaryFeatureProvider::new();
     let feature = Feature::from_string("doom fish")?;
-    provider.insert_feature("label", &feature);
+    provider.insert_feature("label", &feature)?;
     assert_eq!(
         provider
             .get_feature("label")

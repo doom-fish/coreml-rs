@@ -2,10 +2,10 @@ use coreml::prelude::*;
 
 fn main() {
     let mut first = FeatureProvider::new();
-    first.insert_int64("count", 1);
+    first.insert_int64("count", 1).expect("feature should insert");
 
     let mut second = FeatureProvider::new();
-    second.insert_string("label", "doom fish");
+    second.insert_string("label", "doom fish").expect("feature should insert");
 
     let batch = BatchProvider::from_feature_providers(vec![first, second]);
     assert_eq!(batch.len(), 2);

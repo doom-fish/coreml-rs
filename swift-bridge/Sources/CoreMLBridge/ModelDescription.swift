@@ -190,8 +190,11 @@ public func cm_model_description_json(_ modelPtr: UnsafeMutableRawPointer?) -> U
   CChar
 >? {
   guard let modelPtr else {
-    return cm_string("{}")
+    return nil
   }
   let model: MLModel = cm_borrow(modelPtr)
-  return cm_string(cm_json_string(cm_model_description_object(model.modelDescription)))
+  guard let json = cm_json_string_if_valid(cm_model_description_object(model.modelDescription)) else {
+    return nil
+  }
+  return cm_string(json)
 }

@@ -4,9 +4,9 @@ use coreml::ml_array_batch_provider::MLArrayBatchProvider;
 #[test]
 fn ml_array_batch_provider_builds_from_feature_providers() {
     let mut first = FeatureProvider::new();
-    first.insert_int64("value", 10);
+    first.insert_int64("value", 10).unwrap();
     let mut second = FeatureProvider::new();
-    second.insert_int64("value", 20);
+    second.insert_int64("value", 20).unwrap();
 
     let batch = MLArrayBatchProvider::from_feature_providers(vec![first, second]);
     assert_eq!(batch.len(), 2);

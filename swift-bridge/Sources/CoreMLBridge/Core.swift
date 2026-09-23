@@ -237,17 +237,17 @@ func cm_json_safe(_ value: Any) -> Any {
     }
 }
 
-func cm_json_string(_ value: Any) -> String {
-    guard JSONSerialization.isValidJSONObject(value) else {
-        return "{}"
+func cm_json_string_if_valid(_ value: Any) -> String? {
+    guard JSONSerialization.isValidJSONObject(value),
+        let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+    else {
+        return nil
     }
+    return String(data: data, encoding: .utf8)
+}
 
-    do {
-        let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
-        return String(data: data, encoding: .utf8) ?? "{}"
-    } catch {
-        return "{}"
-    }
+func cm_json_string(_ value: Any) -> String {
+    cm_json_string_if_valid(value) ?? "{}"
 }
 
 func cm_multi_array_data_type(from rawValue: Int) throws -> MLMultiArrayDataType {

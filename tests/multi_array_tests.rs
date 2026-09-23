@@ -207,7 +207,7 @@ fn provider_views_are_shared_reads_and_copies_are_independent() {
     let mut array = MultiArray::new_f32(&[3]).unwrap();
     array.copy_from_slice(&[1.0_f32, 2.0, 3.0]).unwrap();
     let mut provider = FeatureProvider::new();
-    provider.insert_multi_array("x", array);
+    provider.insert_multi_array("x", array).unwrap();
 
     let first = provider.get_multi_array("x").unwrap();
     let second = provider.get_multi_array("x").unwrap();

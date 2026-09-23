@@ -32,15 +32,15 @@ fn dropped_async_futures_cancel_without_touching_rust_memory() {
         .expect("model should load");
 
     let mut inputs = FeatureProvider::new();
-    inputs.insert_string("text", "I love this product");
+    inputs.insert_string("text", "I love this product").unwrap();
     for round in 0..20 {
         poll_once(model.predict_async(&inputs, None));
         poll_once(Model::load_async(compiled.as_path(), None));
-        inputs.insert_string("text", if round % 2 == 0 { "awful" } else { "I love this product" });
+        inputs.insert_string("text", if round % 2 == 0 { "awful" } else { "I love this product" }).unwrap();
     }
     thread::sleep(Duration::from_millis(500));
 
-    inputs.insert_string("text", "I love this product");
+    inputs.insert_string("text", "I love this product").unwrap();
     let outputs = pollster::block_on(model.predict_async(&inputs, None))
         .expect("prediction after cancelled futures should succeed");
     assert_eq!(outputs.get_string("label").as_deref(), Some("positive"));

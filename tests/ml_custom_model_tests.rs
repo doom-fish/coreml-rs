@@ -19,7 +19,7 @@ impl MLCustomModel for ScaleModel {
         })?;
         let mut output = FeatureProvider::new();
         output
-            .try_insert_double(
+            .insert_double(
                 "value",
                 value.mul_add(self.scale, if options.uses_cpu_only() { 1.0 } else { 0.0 }),
             )
@@ -28,7 +28,7 @@ impl MLCustomModel for ScaleModel {
                     "failed to populate custom-model output feature provider: {error}"
                 ))
             })?;
-        output.try_insert_string(
+        output.insert_string(
             "description_state",
             if self.saw_empty_description {
                 "empty"
@@ -46,7 +46,7 @@ fn model_parameters(scale: f64) -> BTreeMap<String, Value> {
 
 fn input_provider(value: f64) -> FeatureProvider {
     let mut provider = FeatureProvider::new();
-    provider.insert_double("value", value);
+    provider.insert_double("value", value).unwrap();
     provider
 }
 

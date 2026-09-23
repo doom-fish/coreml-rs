@@ -3,9 +3,9 @@ use coreml::prelude::*;
 #[test]
 fn batch_provider_collects_feature_providers() {
     let mut first = FeatureProvider::new();
-    first.insert_int64("count", 1);
+    first.insert_int64("count", 1).unwrap();
     let mut second = FeatureProvider::new();
-    second.insert_string("label", "doom fish");
+    second.insert_string("label", "doom fish").unwrap();
 
     let batch = BatchProvider::from_feature_providers(vec![first, second]);
     assert_eq!(batch.len(), 2);
