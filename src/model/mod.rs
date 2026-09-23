@@ -22,7 +22,7 @@ use crate::error::{from_swift, take_owned_c_string, CoreMLError};
 use crate::feature_provider::{BatchProvider, FeatureProvider};
 use crate::ffi;
 use crate::ml_state::MLState;
-use crate::model_compiler::ModelCompiler;
+use crate::model_compiler::{CompiledBundle, ModelCompiler};
 pub use crate::model_description::{
     DetailedFeatureDescription, DetailedImageConstraint, DetailedModelDescription,
     DetailedMultiArrayConstraint, DictionaryConstraint, DimensionRange, FeatureDescription,
@@ -31,10 +31,13 @@ pub use crate::model_description::{
     NumericConstraint, ParameterDescription, SequenceConstraint, StateConstraint,
 };
 use crate::prediction::PredictionOptions;
+#[cfg(feature = "async")]
+use crate::retained::{CancelOnDrop, Retained};
 
 /// Owned `MLModel` handle.
 pub struct Model {
     ptr: *mut c_void,
+    pub(crate) compiled_bundle: Option<CompiledBundle>,
 }
 
 impl Model {
@@ -62,7 +65,10 @@ impl Model {
         if status != ffi::status::OK || model.is_null() {
             return Err(from_swift(status, error));
         }
-        Ok(Self { ptr: model })
+        Ok(Self {
+            ptr: model,
+            compiled_bundle: None,
+        })
     }
 
     /// Load a compiled `.mlmodelc` bundle from disk asynchronously.
@@ -83,17 +89,18 @@ impl Model {
         let default_configuration = ModelConfiguration::default();
         let configuration = configuration.unwrap_or(&default_configuration);
         let configuration_json = configuration.as_json_c_string()?;
-        let (future, user_data) = AsyncCompletion::create();
-        unsafe {
-            ffi::cm_model_load_async(
+        let (future, user_data) = AsyncCompletion::<Retained>::create();
+        let _task = unsafe {
+            CancelOnDrop::new(ffi::cm_model_load_async(
                 path.as_ptr(),
                 configuration_json.as_ptr(),
                 model_load_async_callback,
                 user_data,
-            );
-        }
+            ))
+        };
         future
             .await
+            .map(|model| unsafe { Self::from_retained(model.into_raw()) })
             .map_err(|payload| decode_async_error(payload, ffi::status::MODEL_LOAD_FAILED))
     }
 
@@ -120,6 +127,7 @@ impl Model {
                 specification.as_ptr(),
                 specification.len(),
                 configuration_json.as_ptr(),
+                crate::blocking::timeout_seconds(),
                 &raw mut model,
                 &raw mut error,
             )
@@ -127,7 +135,10 @@ impl Model {
         if status != ffi::status::OK || model.is_null() {
             return Err(from_swift(status, error));
         }
-        Ok(Self { ptr: model })
+        Ok(Self {
+            ptr: model,
+            compiled_bundle: None,
+        })
     }
 
     /// Compile a source `.mlmodel` file to a temporary `.mlmodelc` bundle.
@@ -230,18 +241,21 @@ impl Model {
         let default_options = PredictionOptions::default();
         let options = options.unwrap_or(&default_options);
         let options_json = options.as_json_c_string()?;
-        let (future, user_data) = AsyncCompletion::create();
-        unsafe {
-            ffi::cm_model_predict_async(
+        let (future, user_data) = AsyncCompletion::<Retained>::create();
+        let _task = unsafe {
+            CancelOnDrop::new(ffi::cm_model_predict_async(
                 self.ptr,
                 inputs.ptr,
                 options_json.as_ptr(),
                 model_predict_async_callback,
                 user_data,
-            );
-        }
+            ))
+        };
         future
             .await
+            .map(|outputs| FeatureProvider {
+                ptr: outputs.into_raw().as_ptr(),
+            })
             .map_err(|payload| decode_async_error(payload, ffi::status::PREDICTION_FAILED))
     }
 
@@ -421,26 +435,32 @@ impl Model {
         let default_options = PredictionOptions::default();
         let options = options.unwrap_or(&default_options);
         let options_json = options.as_json_c_string()?;
-        let (future, user_data) = AsyncCompletion::create();
-        unsafe {
-            ffi::cm_model_predict_with_state_async(
+        let (future, user_data) = AsyncCompletion::<Retained>::create();
+        let _task = unsafe {
+            CancelOnDrop::new(ffi::cm_model_predict_with_state_async(
                 self.ptr,
                 inputs.ptr,
                 state.ptr,
                 options_json.as_ptr(),
                 model_predict_async_callback,
                 user_data,
-            );
-        }
+            ))
+        };
         future
             .await
+            .map(|outputs| FeatureProvider {
+                ptr: outputs.into_raw().as_ptr(),
+            })
             .map_err(|payload| decode_async_error(payload, ffi::status::STATE_FAILED))
     }
 }
 
 impl Model {
     pub(crate) unsafe fn from_retained(ptr: NonNull<c_void>) -> Self {
-        Self { ptr: ptr.as_ptr() }
+        Self {
+            ptr: ptr.as_ptr(),
+            compiled_bundle: None,
+        }
     }
 }
 
@@ -492,11 +512,14 @@ extern "C" fn model_load_async_callback(
     error: *const c_char,
     user_data: *mut c_void,
 ) {
+    let result = unsafe { Retained::new(result) };
     catch_user_panic("coreml::model_load_async_callback", || {
         if status == ffi::status::OK {
-            if result.is_null() {
+            if let Some(model) = result {
+                unsafe { AsyncCompletion::<Retained>::complete_ok(user_data, model) };
+            } else {
                 unsafe {
-                    AsyncCompletion::<Model>::complete_err(
+                    AsyncCompletion::<Retained>::complete_err(
                         user_data,
                         encode_async_error(
                             ffi::status::MODEL_LOAD_FAILED,
@@ -504,19 +527,17 @@ extern "C" fn model_load_async_callback(
                         ),
                     );
                 }
-            } else {
-                unsafe { AsyncCompletion::<Model>::complete_ok(user_data, Model { ptr: result }) };
             }
             return;
         }
 
-        if !result.is_null() {
-            unsafe { ffi::cm_object_release(result) };
-        }
-
+        drop(result);
         let message = unsafe { error_from_cstr(error) };
         unsafe {
-            AsyncCompletion::<Model>::complete_err(user_data, encode_async_error(status, message));
+            AsyncCompletion::<Retained>::complete_err(
+                user_data,
+                encode_async_error(status, message),
+            );
         }
     });
 }
@@ -528,11 +549,14 @@ extern "C" fn model_predict_async_callback(
     error: *const c_char,
     user_data: *mut c_void,
 ) {
+    let result = unsafe { Retained::new(result) };
     catch_user_panic("coreml::model_predict_async_callback", || {
         if status == ffi::status::OK {
-            if result.is_null() {
+            if let Some(outputs) = result {
+                unsafe { AsyncCompletion::<Retained>::complete_ok(user_data, outputs) };
+            } else {
                 unsafe {
-                    AsyncCompletion::<FeatureProvider>::complete_err(
+                    AsyncCompletion::<Retained>::complete_err(
                         user_data,
                         encode_async_error(
                             ffi::status::PREDICTION_FAILED,
@@ -540,24 +564,14 @@ extern "C" fn model_predict_async_callback(
                         ),
                     );
                 }
-            } else {
-                unsafe {
-                    AsyncCompletion::<FeatureProvider>::complete_ok(
-                        user_data,
-                        FeatureProvider { ptr: result },
-                    );
-                }
             }
             return;
         }
 
-        if !result.is_null() {
-            unsafe { ffi::cm_object_release(result) };
-        }
-
+        drop(result);
         let message = unsafe { error_from_cstr(error) };
         unsafe {
-            AsyncCompletion::<FeatureProvider>::complete_err(
+            AsyncCompletion::<Retained>::complete_err(
                 user_data,
                 encode_async_error(status, message),
             );

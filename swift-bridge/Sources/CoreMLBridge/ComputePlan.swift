@@ -155,6 +155,7 @@ import Foundation
   public func cm_compute_plan_load_summary(
     _ pathPtr: UnsafePointer<CChar>?,
     _ configurationJson: UnsafePointer<CChar>?,
+    _ timeoutSeconds: Double,
     _ outSummaryJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
   ) -> Int32 {
@@ -166,9 +167,9 @@ import Foundation
     if #available(macOS 14.4, *) {
       do {
         let configuration = try cm_make_configuration(from: configurationJson)
-        switch cm_block_on_async(work: {
-          try await MLComputePlan.load(
-            contentsOf: cm_url(from: pathPtr), configuration: configuration)
+        let url = cm_url(from: pathPtr)
+        switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
+          try await MLComputePlan.load(contentsOf: url, configuration: configuration)
         }) {
         case .success(let plan):
           outSummaryJson.pointee = cm_string(cm_json_string(cm_compute_plan_object(plan)))
@@ -190,6 +191,7 @@ import Foundation
   public func cm_compute_plan_load_summary(
     _: UnsafePointer<CChar>?,
     _: UnsafePointer<CChar>?,
+    _: Double,
     _ outSummaryJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
   ) -> Int32 {

@@ -41,8 +41,65 @@ enum CMBridgeError: LocalizedError {
     }
 }
 
-final class CMAsyncBox<T> {
-    var result: Result<T, Error>?
+final class CMAsyncResult<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Result<T, Error>?
+    private var abandoned = false
+    private let discard: (T) -> Void
+
+    init(discard: @escaping (T) -> Void) {
+        self.discard = discard
+    }
+
+    func store(_ result: Result<T, Error>) {
+        lock.lock()
+        guard !abandoned else {
+            lock.unlock()
+            if case let .success(value) = result {
+                discard(value)
+            }
+            return
+        }
+        stored = result
+        lock.unlock()
+    }
+
+    func take() -> Result<T, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func abandon() {
+        lock.lock()
+        abandoned = true
+        let late = stored
+        stored = nil
+        lock.unlock()
+        if case let .success(value) = late {
+            discard(value)
+        }
+    }
+}
+
+final class CMTaskHandle: NSObject, @unchecked Sendable {
+    private let cancelWork: () -> Void
+
+    init<Success, Failure>(_ task: Task<Success, Failure>) {
+        cancelWork = { task.cancel() }
+        super.init()
+    }
+
+    func cancel() {
+        cancelWork()
+    }
+}
+
+@_cdecl("cm_task_cancel")
+public func cm_task_cancel(_ handlePtr: UnsafeMutableRawPointer?) {
+    guard let handlePtr else { return }
+    let handle: CMTaskHandle = cm_borrow(handlePtr)
+    handle.cancel()
 }
 
 @inline(__always)
@@ -101,26 +158,36 @@ func cm_url(from path: UnsafePointer<CChar>) -> URL {
 }
 
 func cm_block_on_async<T>(
-    timeoutSeconds: Int = 60,
+    timeoutSeconds: Double,
+    discard: @escaping (T) -> Void = { _ in },
     work: @escaping () async throws -> T
 ) -> Result<T, Error> {
     let semaphore = DispatchSemaphore(value: 0)
-    let box = CMAsyncBox<T>()
+    let result = CMAsyncResult<T>(discard: discard)
 
-    Task {
-        defer { semaphore.signal() }
+    let task = Task {
         do {
-            box.result = .success(try await work())
+            result.store(.success(try await work()))
         } catch {
-            box.result = .failure(error)
+            result.store(.failure(error))
         }
+        semaphore.signal()
     }
 
-    if semaphore.wait(timeout: .now() + .seconds(timeoutSeconds)) == .timedOut {
-        return .failure(CMBridgeError.timedOut("timed out waiting for CoreML async work"))
+    if timeoutSeconds > 0 {
+        let deadline = DispatchTime.now() + min(timeoutSeconds, 1e9)
+        if semaphore.wait(timeout: deadline) == .timedOut {
+            task.cancel()
+            result.abandon()
+            return .failure(
+                CMBridgeError.timedOut("timed out waiting for CoreML async work; the work was cancelled"))
+        }
+    } else {
+        semaphore.wait()
     }
 
-    return box.result ?? .failure(CMBridgeError.operationFailed("CoreML async work produced no result"))
+    return result.take()
+        ?? .failure(CMBridgeError.operationFailed("CoreML async work produced no result"))
 }
 
 func cm_json_object(from jsonPtr: UnsafePointer<CChar>?) throws -> [String: Any] {

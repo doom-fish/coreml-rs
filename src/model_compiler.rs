@@ -19,6 +19,8 @@ use crate::model::decode_async_error;
 #[cfg(feature = "async")]
 use crate::model::encode_async_error;
 use crate::model::Model;
+#[cfg(feature = "async")]
+use crate::retained::CancelOnDrop;
 
 /// Utilities mirroring `MLModel`'s model-compilation APIs.
 #[derive(Debug, Default, Clone, Copy)]
@@ -34,8 +36,14 @@ impl ModelCompiler {
         let path = path_to_c_string(mlmodel_path)?;
         let mut error = ptr::null_mut();
         let mut compiled_path = ptr::null_mut();
-        let status =
-            unsafe { ffi::cm_model_compile(path.as_ptr(), &raw mut compiled_path, &raw mut error) };
+        let status = unsafe {
+            ffi::cm_model_compile(
+                path.as_ptr(),
+                crate::blocking::timeout_seconds(),
+                &raw mut compiled_path,
+                &raw mut error,
+            )
+        };
         if status != ffi::status::OK || compiled_path.is_null() {
             return Err(from_swift(status, error));
         }
@@ -53,11 +61,16 @@ impl ModelCompiler {
     pub async fn compile_async(mlmodel_path: &Path) -> Result<PathBuf, CoreMLError> {
         let path = path_to_c_string(mlmodel_path)?;
         let (future, user_data) = AsyncCompletion::create();
-        unsafe {
-            ffi::cm_model_compile_async(path.as_ptr(), model_compile_async_callback, user_data);
-        }
+        let _task = unsafe {
+            CancelOnDrop::new(ffi::cm_model_compile_async(
+                path.as_ptr(),
+                model_compile_async_callback,
+                user_data,
+            ))
+        };
         future
             .await
+            .map(CompiledBundle::into_path)
             .map_err(|payload| decode_async_error(payload, ffi::status::COMPILATION_FAILED))
     }
 
@@ -71,7 +84,10 @@ impl ModelCompiler {
         configuration: &ModelConfiguration,
     ) -> Result<Model, CoreMLError> {
         let compiled = Self::compile(mlmodel_path)?;
-        Model::load_from_url(compiled, configuration)
+        let bundle = CompiledBundle::new(compiled.clone());
+        let mut model = Model::load_from_url(compiled, configuration)?;
+        model.compiled_bundle = Some(bundle);
+        Ok(model)
     }
 
     /// Compile a source `.mlmodel` asynchronously and load the compiled bundle.
@@ -87,7 +103,31 @@ impl ModelCompiler {
         configuration: Option<&ModelConfiguration>,
     ) -> Result<Model, CoreMLError> {
         let compiled = Self::compile_async(mlmodel_path).await?;
-        Model::load_async(compiled.as_path(), configuration).await
+        let bundle = CompiledBundle::new(compiled.clone());
+        let mut model = Model::load_async(compiled.as_path(), configuration).await?;
+        model.compiled_bundle = Some(bundle);
+        Ok(model)
+    }
+}
+
+pub(crate) struct CompiledBundle(Option<PathBuf>);
+
+impl CompiledBundle {
+    pub(crate) const fn new(path: PathBuf) -> Self {
+        Self(Some(path))
+    }
+
+    #[cfg(feature = "async")]
+    fn into_path(mut self) -> PathBuf {
+        self.0.take().unwrap_or_default()
+    }
+}
+
+impl Drop for CompiledBundle {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = std::fs::remove_dir_all(path);
+        }
     }
 }
 
@@ -102,7 +142,7 @@ extern "C" fn model_compile_async_callback(
         if status == ffi::status::OK {
             if compiled_path.is_null() {
                 unsafe {
-                    AsyncCompletion::<PathBuf>::complete_err(
+                    AsyncCompletion::<CompiledBundle>::complete_err(
                         user_data,
                         encode_async_error(
                             ffi::status::COMPILATION_FAILED,
@@ -111,8 +151,9 @@ extern "C" fn model_compile_async_callback(
                     );
                 }
             } else {
-                let path = PathBuf::from(take_owned_c_string(compiled_path));
-                unsafe { AsyncCompletion::<PathBuf>::complete_ok(user_data, path) };
+                let bundle =
+                    CompiledBundle::new(PathBuf::from(take_owned_c_string(compiled_path)));
+                unsafe { AsyncCompletion::<CompiledBundle>::complete_ok(user_data, bundle) };
             }
             return;
         }
@@ -123,7 +164,7 @@ extern "C" fn model_compile_async_callback(
 
         let message = unsafe { error_from_cstr(error) };
         unsafe {
-            AsyncCompletion::<PathBuf>::complete_err(
+            AsyncCompletion::<CompiledBundle>::complete_err(
                 user_data,
                 encode_async_error(status, message),
             );

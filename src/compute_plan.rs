@@ -185,6 +185,7 @@ fn load_compute_plan_json(
         ffi::cm_compute_plan_load_summary(
             path.as_ptr(),
             configuration_json.as_ptr(),
+            crate::blocking::timeout_seconds(),
             &raw mut summary,
             &raw mut error,
         )

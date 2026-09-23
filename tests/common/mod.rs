@@ -59,3 +59,30 @@ stderr:
     );
     compiled
 }
+
+pub fn unique_model_source(suite: &str, asset_stem: &str) -> (PathBuf, String) {
+    let stem = format!("{asset_stem}_{suite}_{}", std::process::id()).replace('-', "_");
+    let source = artifact_dir(suite).join(format!("{stem}.mlmodel"));
+    fs::copy(asset_path(&format!("{asset_stem}.mlmodel")), &source)
+        .expect("copy model source fixture");
+    (source, stem)
+}
+
+pub fn temporary_bundles(stem: &str) -> usize {
+    let exact = format!("{stem}.mlmodelc");
+    let prefix = format!("{stem}_");
+    let output = Command::new("getconf")
+        .arg("DARWIN_USER_TEMP_DIR")
+        .output()
+        .expect("run getconf");
+    let temp_dir = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    fs::read_dir(temp_dir)
+        .expect("read the per-user temporary directory")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name == exact || (name.starts_with(&prefix) && name.ends_with(".mlmodelc"))
+        })
+        .count()
+}

@@ -161,11 +161,11 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
         _ predictionOptionsJson: UnsafePointer<CChar>?,
         _ callback: @escaping CMModelAsyncCallback,
         _ refcon: UnsafeMutableRawPointer?
-    ) {
+    ) -> UnsafeMutableRawPointer? {
         let callbackBox = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
         guard let modelPtr, let inputsPtr, let statePtr else {
             callbackBox.fail(status: CM_INVALID_ARGUMENT, message: "model, inputs, and state must not be null")
-            return
+            return nil
         }
         if #available(macOS 15.0, *) {
             let model: MLModel = cm_borrow(modelPtr)
@@ -173,10 +173,11 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
             let box: CMStateBox = cm_borrow(statePtr)
             do {
                 let options = try cm_make_prediction_options(from: predictionOptionsJson)
-                Task {
+                let task = Task {
                     await box.gate.acquireForTask()
                     let result: Result<any MLFeatureProvider, Error>
                     do {
+                        try Task.checkCancellation()
                         result = .success(try await model.prediction(from: inputs, using: box.state, options: options))
                     } catch {
                         result = .failure(error)
@@ -189,12 +190,14 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
                         callbackBox.fail(error: error, fallback: CM_STATE_FAILED)
                     }
                 }
+                return cm_retain(CMTaskHandle(task))
             } catch {
                 callbackBox.fail(error: error, fallback: CM_STATE_FAILED)
+                return nil
             }
-            return
         }
         callbackBox.fail(status: CM_UNSUPPORTED, message: "MLState requires macOS 15.0+")
+        return nil
     }
 
     @_cdecl("cm_state_with_multi_array")
@@ -263,9 +266,10 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
         _: UnsafePointer<CChar>?,
         _ callback: @escaping CMModelAsyncCallback,
         _ refcon: UnsafeMutableRawPointer?
-    ) {
+    ) -> UnsafeMutableRawPointer? {
         let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
         box.fail(status: CM_UNSUPPORTED, message: "MLState requires a macOS 15.0+ SDK")
+        return nil
     }
 
     @_cdecl("cm_state_with_multi_array")

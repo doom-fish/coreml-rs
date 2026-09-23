@@ -33,6 +33,7 @@ final class CMModelCompileAsyncCallbackBox: @unchecked Sendable {
 @_cdecl("cm_model_compile")
 public func cm_model_compile(
     _ pathPtr: UnsafePointer<CChar>?,
+    _ timeoutSeconds: Double,
     _ outCompiledPath: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 ) -> Int32 {
@@ -43,7 +44,11 @@ public func cm_model_compile(
     }
 
     let sourceURL = cm_url(from: pathPtr)
-    switch cm_block_on_async(work: { try await MLModel.compileModel(at: sourceURL) }) {
+    switch cm_block_on_async(
+        timeoutSeconds: timeoutSeconds,
+        discard: { compiledURL in try? FileManager.default.removeItem(at: compiledURL) },
+        work: { try await MLModel.compileModel(at: sourceURL) }
+    ) {
     case let .success(compiledURL):
         outCompiledPath.pointee = cm_string(compiledURL.path)
         return CM_OK
@@ -58,20 +63,22 @@ public func cm_model_compile_async(
     _ pathPtr: UnsafePointer<CChar>?,
     _ callback: @escaping CMModelCompileAsyncCallback,
     _ refcon: UnsafeMutableRawPointer?
-) {
+) -> UnsafeMutableRawPointer? {
     let box = CMModelCompileAsyncCallbackBox(callback: callback, refcon: refcon)
     guard let pathPtr else {
         box.fail(status: CM_INVALID_ARGUMENT, message: "source model path must not be null")
-        return
+        return nil
     }
 
     let sourceURL = cm_url(from: pathPtr)
-    Task {
+    let task = Task {
         do {
+            try Task.checkCancellation()
             let compiledURL = try await MLModel.compileModel(at: sourceURL)
             box.succeed(compiledURL.path)
         } catch {
             box.fail(error: error, fallback: CM_COMPILATION_FAILED)
         }
     }
+    return cm_retain(CMTaskHandle(task))
 }

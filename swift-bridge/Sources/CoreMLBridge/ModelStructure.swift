@@ -148,6 +148,7 @@ import Foundation
   @_cdecl("cm_model_structure_load_json")
   public func cm_model_structure_load_json(
     _ pathPtr: UnsafePointer<CChar>?,
+    _ timeoutSeconds: Double,
     _ outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
   ) -> Int32 {
@@ -157,8 +158,9 @@ import Foundation
       return CM_INVALID_ARGUMENT
     }
     if #available(macOS 14.4, *) {
-      switch cm_block_on_async(work: {
-        try await MLModelStructure.load(contentsOf: cm_url(from: pathPtr))
+      let url = cm_url(from: pathPtr)
+      switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
+        try await MLModelStructure.load(contentsOf: url)
       }) {
       case .success(let structure):
         outJson.pointee = cm_string(cm_json_string(cm_model_structure_object(structure)))
@@ -175,6 +177,7 @@ import Foundation
   @_cdecl("cm_model_structure_load_json")
   public func cm_model_structure_load_json(
     _: UnsafePointer<CChar>?,
+    _: Double,
     _ outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
     _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
   ) -> Int32 {

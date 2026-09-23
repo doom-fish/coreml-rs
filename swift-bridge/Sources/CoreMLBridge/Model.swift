@@ -60,26 +60,29 @@ public func cm_model_load_async(
   _ configurationJson: UnsafePointer<CChar>?,
   _ callback: @escaping CMModelAsyncCallback,
   _ refcon: UnsafeMutableRawPointer?
-) {
+) -> UnsafeMutableRawPointer? {
   let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
   guard let pathPtr else {
     box.fail(status: CM_INVALID_ARGUMENT, message: "model path must not be null")
-    return
+    return nil
   }
 
   do {
     let configuration = try cm_make_configuration(from: configurationJson)
     let url = cm_url(from: pathPtr)
-    MLModel.load(contentsOf: url, configuration: configuration) { result in
-      switch result {
-      case let .success(model):
+    let task = Task {
+      do {
+        try Task.checkCancellation()
+        let model = try await MLModel.load(contentsOf: url, configuration: configuration)
         box.succeed(cm_retain(model))
-      case let .failure(error):
+      } catch {
         box.fail(error: error, fallback: CM_MODEL_LOAD_FAILED)
       }
     }
+    return cm_retain(CMTaskHandle(task))
   } catch {
     box.fail(error: error, fallback: CM_MODEL_LOAD_FAILED)
+    return nil
   }
 }
 
@@ -88,6 +91,7 @@ public func cm_model_load_from_specification(
   _ bytesPtr: UnsafePointer<UInt8>?,
   _ byteCount: Int,
   _ configurationJson: UnsafePointer<CChar>?,
+  _ timeoutSeconds: Double,
   _ outModel: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
   _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 ) -> Int32 {
@@ -101,7 +105,7 @@ public func cm_model_load_from_specification(
     let data = Data(bytes: bytesPtr, count: byteCount)
     let asset = try MLModelAsset(specification: data)
     let configuration = try cm_make_configuration(from: configurationJson)
-    switch cm_block_on_async(work: {
+    switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
       try await MLModel.load(asset: asset, configuration: configuration)
     }) {
     case .success(let model):
@@ -134,32 +138,35 @@ public func cm_model_predict_async(
   _ predictionOptionsJson: UnsafePointer<CChar>?,
   _ callback: @escaping CMModelAsyncCallback,
   _ refcon: UnsafeMutableRawPointer?
-) {
+) -> UnsafeMutableRawPointer? {
   let box = CMModelAsyncCallbackBox(callback: callback, refcon: refcon)
   guard let modelPtr, let inputsPtr else {
     box.fail(status: CM_INVALID_ARGUMENT, message: "model and inputs must not be null")
-    return
+    return nil
   }
   guard #available(macOS 14.0, *) else {
     box.fail(status: CM_UNSUPPORTED, message: "asynchronous prediction requires macOS 14.0+")
-    return
+    return nil
   }
 
   let model: MLModel = cm_borrow(modelPtr)
-  let inputs: CMFeatureProviderBox = cm_borrow(inputsPtr)
+  let inputs = (cm_borrow(inputsPtr) as CMFeatureProviderBox).snapshot()
 
   do {
     let options = try cm_make_prediction_options(from: predictionOptionsJson)
-    Task {
+    let task = Task {
       do {
+        try Task.checkCancellation()
         let output = try await model.prediction(from: inputs, options: options)
         box.succeed(cm_retain(CMFeatureProviderBox(provider: output)))
       } catch {
         box.fail(error: error, fallback: CM_PREDICTION_FAILED)
       }
     }
+    return cm_retain(CMTaskHandle(task))
   } catch {
     box.fail(error: error, fallback: CM_PREDICTION_FAILED)
+    return nil
   }
 }
 

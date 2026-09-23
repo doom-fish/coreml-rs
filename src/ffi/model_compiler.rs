@@ -10,6 +10,7 @@ pub type ModelCompilerAsyncCallback = extern "C" fn(
 extern "C" {
     pub fn cm_model_compile(
         path: *const c_char,
+        timeout_seconds: f64,
         out_compiled_path: *mut *mut c_char,
         error_out: *mut *mut c_char,
     ) -> i32;
@@ -17,5 +18,5 @@ extern "C" {
         path: *const c_char,
         callback: ModelCompilerAsyncCallback,
         user_data: *mut c_void,
-    );
+    ) -> *mut c_void;
 }

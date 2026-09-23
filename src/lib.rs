@@ -24,6 +24,7 @@
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub mod async_api;
 pub mod batch_provider;
+pub mod blocking;
 pub mod compute_device;
 pub mod compute_plan;
 pub mod configuration;
@@ -46,8 +47,10 @@ pub mod model_error;
 pub mod model_structure;
 pub mod multi_array;
 pub mod prediction;
+mod retained;
 pub mod update;
 
+pub use blocking::{blocking_timeout, set_blocking_timeout};
 pub use compute_device::{all_compute_devices, ComputeDevice, ComputeDeviceKind};
 pub use compute_plan::{
     ComputePlan, ComputePlanCost, ComputePlanDetails, ComputePlanDeviceUsage, ComputePlanModelType,

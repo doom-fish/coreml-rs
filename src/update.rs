@@ -18,6 +18,7 @@ use crate::error::{from_swift, CoreMLError};
 use crate::feature_provider::BatchProvider;
 use crate::ffi;
 use crate::model::Model;
+use crate::retained::Retained;
 
 /// Progress events that may be requested from an update task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,7 +253,7 @@ impl Update {
                     contexts.push(context);
                     return match (final_state, model) {
                         (UpdateTaskState::Completed, Some(model)) => Ok(UpdateOutcome {
-                            model: model.into_model(),
+                            model: unsafe { Model::from_retained(model.into_raw()) },
                             result: UpdateResult {
                                 final_state,
                                 contexts,
@@ -275,29 +276,11 @@ enum UpdateMessage {
     Progress(String),
     Completion {
         json: String,
-        model: Option<RetainedModel>,
+        model: Option<Retained>,
     },
 }
 
 type UpdateSender = mpsc::Sender<UpdateMessage>;
-
-struct RetainedModel(NonNull<c_void>);
-
-unsafe impl Send for RetainedModel {}
-
-impl RetainedModel {
-    fn into_model(self) -> Model {
-        let model = unsafe { Model::from_retained(self.0) };
-        core::mem::forget(self);
-        model
-    }
-}
-
-impl Drop for RetainedModel {
-    fn drop(&mut self) {
-        unsafe { ffi::cm_object_release(self.0.as_ptr()) };
-    }
-}
 
 struct UpdateTask(NonNull<c_void>);
 
@@ -316,7 +299,7 @@ unsafe extern "C" fn update_event_trampoline(
     context_json: *const c_char,
     model: *mut c_void,
 ) {
-    let model = NonNull::new(model).map(RetainedModel);
+    let model = unsafe { Retained::new(model) };
     catch_user_panic("coreml::update_event", move || {
         let json = if context_json.is_null() {
             String::new()

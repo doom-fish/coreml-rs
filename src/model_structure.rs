@@ -63,8 +63,14 @@ impl ModelStructure {
         let path = path_to_c_string(path)?;
         let mut error = ptr::null_mut();
         let mut json = ptr::null_mut();
-        let status =
-            unsafe { ffi::cm_model_structure_load_json(path.as_ptr(), &raw mut json, &raw mut error) };
+        let status = unsafe {
+            ffi::cm_model_structure_load_json(
+                path.as_ptr(),
+                crate::blocking::timeout_seconds(),
+                &raw mut json,
+                &raw mut error,
+            )
+        };
         if status != ffi::status::OK || json.is_null() {
             return Err(from_swift(status, error));
         }
