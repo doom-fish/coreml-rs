@@ -1,5 +1,16 @@
 # coreml coverage audit v2 (vs MacOSX26.2.sdk)
 
+> **What this measures.** The count covers the 92 top-level Objective-C CoreML
+> symbols in the SDK headers (interfaces, categories, protocols, enums,
+> constants and functions). It does not count methods or properties, so 100%
+> does not mean every method is wrapped. Swift-only overlays are outside the
+> count and not wrapped: `MLTensor` (about 274 declarations, macOS 15+) and
+> `MLShapedArray`. Also not wrapped: `MLPredictionOptions.outputBackings`,
+> `MLFeatureValue(cgImage:)` and `imageBufferValue`, and the custom-stride,
+> data-pointer and pixel-buffer `MLMultiArray` initializers. See COVERAGE.md
+> for the per-header status. This file is an earlier re-validation against
+> MacOSX26.2.sdk; COVERAGE_AUDIT.md (MacOSX26.5.sdk) supersedes it.
+
 SDK_PUBLIC_SYMBOLS: 92
 VERIFIED: 92
 GAPS: 0
@@ -32,7 +43,7 @@ This audit re-validates the v1 audit against MacOSX26.2.sdk by verifying SDK pub
 | MLImageConstraint | interface | MLImageConstraint.h | `ImageConstraint` / `DetailedImageConstraint` snapshots in `src/model_description.rs` (fixed size + flexible image-size metadata). |
 | MLMetricKey | interface | MLMetricKey.h | `UpdateContext::metrics: BTreeMap<String, Value>` in `src/update.rs`; the Swift bridge stringifies `MLMetricKey` names in `swift-bridge/Sources/CoreMLBridge/Update.swift`. |
 | MLModel (MLModelCompilation) | interface | MLModel+MLModelCompilation.h | `ModelCompiler::compile`, `Model::compile_model`, and `Model::compile_and_load` in `src/model_compiler.rs` and `src/model/mod.rs`. |
-| MLModel (MLState) | interface | MLModel+MLState.h | `Model::new_state`, `predict_with_state`, and `predict_with_state_and_options` in `src/model/mod.rs`. |
+| MLModel (MLState) | interface | MLModel+MLState.h | `Model::new_state`, `predict_with_state`, `predict_with_state_and_options`, and `predict_with_state_async` in `src/model/mod.rs` (all take `&mut MLState`). |
 | MLModel | interface | MLModel.h | `Model` in `src/model/mod.rs` (`load_from_url`, `predict*`, `predict_batch*`, `description`). |
 | MLModelAsset | interface | MLModelAsset.h | `Model::load_from_specification_data` in `src/model/mod.rs`; the Swift bridge constructs `MLModelAsset(specification:)` in `swift-bridge/Sources/CoreMLBridge/Model.swift`. |
 | MLComputeUnits | enum | MLModelConfiguration.h | `ComputeUnits` in `src/configuration/mod.rs`. |
@@ -48,10 +59,10 @@ This audit re-validates the v1 audit against MacOSX26.2.sdk by verifying SDK pub
 | MLModelAuthorKey | constant | MLModelMetadataKeys.h | `ModelDescription::metadata` in `src/model_description.rs` exposes metadata as raw string keys. |
 | MLModelLicenseKey | constant | MLModelMetadataKeys.h | `ModelDescription::metadata` in `src/model_description.rs` exposes metadata as raw string keys. |
 | MLModelCreatorDefinedKey | constant | MLModelMetadataKeys.h | `ModelDescription::metadata` in `src/model_description.rs` exposes metadata as raw string keys. |
-| MLMultiArrayDataType | enum | MLMultiArray.h | `DataType` in `src/multi_array/mod.rs`. |
-| MLMultiArray | interface | MLMultiArray.h | `MultiArray` in `src/multi_array/mod.rs`. |
+| MLMultiArrayDataType | enum | MLMultiArray.h | `DataType` in `src/multi_array/mod.rs` (Float64, Float32, Float16, Int32, Int8 on macOS 26+, and `Unknown(raw)` for values the crate does not know). |
+| MLMultiArray | interface | MLMultiArray.h | `MultiArray` (owned), `MultiArrayRef` (borrowed) and `MultiArrayView` (read-only) in `src/multi_array/mod.rs`; the `pixelBuffer` accessor is not wrapped. |
 | MLMultiArray (Creation) | interface | MLMultiArray.h | `MultiArray::new*` constructors in `src/multi_array/mod.rs` (shape-based allocation only; no custom-stride/data-pointer/pixel-buffer initializers). |
-| MLMultiArray (ScopedBufferAccess) | interface | MLMultiArray.h | `MultiArray::as_*_slice`, `as_*_slice_mut`, and index helpers in `src/multi_array/mod.rs`. |
+| MLMultiArray (ScopedBufferAccess) | interface | MLMultiArray.h | `MultiArrayRef::{with_bytes, with_bytes_mut, with_slice, with_slice_mut}` and the element accessors (`get`, `set`, `to_vec`, `copy_from_slice`, NSNumber-style helpers) in `src/multi_array/mod.rs` all run inside `getBytesWithHandler` / `getMutableBytesWithHandler` via `cm_multi_array_access_bytes`; storage slices never outlive the closure. |
 | MLMultiArrayConstraint | interface | MLMultiArrayConstraint.h | `MultiArrayConstraint` snapshot in `src/model_description.rs`. |
 | MLNumericConstraint | interface | MLNumericConstraint.h | `NumericConstraint` snapshot in `src/model_description.rs`. |
 | MLOptimizationHints | interface | MLOptimizationHints.h | `OptimizationHints` in `src/configuration/mod.rs`. |
@@ -64,14 +75,14 @@ This audit re-validates the v1 audit against MacOSX26.2.sdk by verifying SDK pub
 | MLReshapeFrequencyHint | enum | MLReshapeFrequencyHint.h | `ReshapeFrequencyHint` in `src/configuration/mod.rs`. |
 | MLSequenceConstraint | interface | MLSequenceConstraint.h | `SequenceConstraint` snapshot in `src/model_description.rs`. |
 | MLSpecializationStrategy | enum | MLSpecializationStrategy.h | `SpecializationStrategy` in `src/configuration/mod.rs`. |
-| MLState | interface | MLState.h | `MLState` in `src/ml_state.rs` (`runtime_supported`, `snapshot_multi_array`). |
+| MLState | interface | MLState.h | `MLState` in `src/ml_state.rs` (`runtime_supported`, `with_multi_array`, `with_multi_array_mut`, `snapshot_multi_array`); predictions and buffer access are serialized per state. |
 | MLStateConstraint | interface | MLStateConstraint.h | `StateConstraint` snapshot in `src/model_description.rs`. |
 | MLTaskState | enum | MLTask.h | `UpdateTaskState` in `src/update.rs`. |
 | MLTask | interface | MLTask.h | `UpdateContext::task_identifier` and `UpdateContext::state` in `src/update.rs` surface `MLTask` state snapshots (no direct task handle). |
-| MLUpdateContext | interface | MLUpdateContext.h | `UpdateContext` in `src/update.rs`. |
+| MLUpdateContext | interface | MLUpdateContext.h | `UpdateContext` snapshots in `src/update.rs`; the context's updated model is returned as `UpdateOutcome::model`. |
 | MLUpdateProgressEvent | enum | MLUpdateProgressEvent.h | `UpdateEvent` in `src/update.rs`. |
-| MLUpdateProgressHandlers | interface | MLUpdateProgressHandlers.h | `UpdateProgressHandlers` in `src/update.rs`. |
-| MLUpdateTask | interface | MLUpdateTask.h | `Update::run` in `src/update.rs` drives `MLUpdateTask` synchronously; the Swift bridge creates the task in `swift-bridge/Sources/CoreMLBridge/Update.swift`. |
+| MLUpdateProgressHandlers | interface | MLUpdateProgressHandlers.h | `UpdateProgressHandlers` in `src/update.rs` (requested events plus an `on_progress` callback run on the calling thread). |
+| MLUpdateTask | interface | MLUpdateTask.h | `Update::run` in `src/update.rs` starts `MLUpdateTask`, streams progress, returns the updated model in `UpdateOutcome`, and cancels on timeout; the Swift bridge is `swift-bridge/Sources/CoreMLBridge/Update.swift`. |
 | MLAllComputeDevices | function | MLAllComputeDevices.h | `all_compute_devices()` in `src/compute_device.rs`; bridged by `cm_all_compute_devices_json` in `swift-bridge/Sources/CoreMLBridge/ComputeDevice.swift`. |
 | MLCPUComputeDevice | interface | MLCPUComputeDevice.h | `ComputeDevice` / `ComputeDeviceKind::Cpu` in `src/compute_device.rs`. |
 | MLComputeDeviceProtocol | protocol | MLComputeDeviceProtocol.h | `ComputeDevice` snapshots in `src/compute_device.rs` serialize CoreML compute devices discovered by the Swift bridge. |

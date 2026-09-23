@@ -12,15 +12,15 @@ Safe, idiomatic Rust bindings for Apple’s [CoreML](https://developer.apple.com
 - **ComputePlan** — request `MLComputePlan` summaries for compiled models.
 - **ModelCompiler** — compile source `.mlmodel` files into temporary `.mlmodelc` bundles.
 - **BatchProvider / MLArrayBatchProvider** — build CoreML batches from feature-provider arrays.
-- **Update** — run `MLUpdateTask` workflows synchronously and capture progress/completion contexts.
+- **Update** — run `MLUpdateTask` workflows, receive progress callbacks on the calling thread, and get the updated model back.
 - **MLDictionaryFeatureProvider** — build mutable dictionary-backed feature providers.
-- **MLState** — create `MLState` handles, run stateful predictions, and snapshot named state buffers.
+- **MLState** — create `MLState` handles, run serialized stateful predictions, and read, write, or snapshot named state buffers.
 - **MLCustomLayer / MLCustomModel** — register Rust callback implementations as Objective-C CoreML custom layers/models and exercise them in headless tests/examples.
-- **MultiArray** — allocate and mutate `MLMultiArray` tensors with `Float32`, `Float16`, `Int32`, and `Float64` storage.
+- **MultiArray** — allocate and mutate `MLMultiArray` tensors with `Float32`, `Float16`, `Int32`, `Float64`, and (macOS 26+) `Int8` storage through scoped, type-checked access.
 
 ## Requirements
 
-- macOS 13.0 or newer
+- macOS 13.0 or newer. Some APIs need a newer system and return `CoreMLError::Unsupported` on older ones: async prediction (14.0), `ComputePlan` and `ModelStructure` (14.4), `MLState` and `MultiArray::transfer_to` (15.0), and `Int8` multi-arrays (26.0).
 - Xcode 15+ with the macOS SDK
 - A compiled `.mlmodelc` bundle, a source `.mlmodel`, or a `.mlmodel` specification in memory
 
@@ -68,6 +68,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Multi-array access
+
+`MultiArray` owns an `MLMultiArray` and dereferences to `MultiArrayRef`, which
+carries every accessor. Arrays read from a `FeatureProvider` or `Feature` come
+back as a read-only `MultiArrayView` tied to that borrow; call `copy_to_owned`
+for a mutable copy. Element access (`get`, `set`, `to_vec`, `copy_from_slice`,
+`with_slice`, `with_bytes` and their `_mut` forms) runs inside CoreML's scoped
+`getBytesWithHandler` / `getMutableBytesWithHandler` blocks, checks the element
+type, bounds-checks every offset, and follows the array's strides. Storage
+slices never outlive the closure they are handed to.
+
+## Blocking calls, timeouts and cancellation
+
+The synchronous wrappers over CoreML's async APIs (`ModelCompiler::compile`,
+`Model::load_from_specification_data`, `ComputePlan`, `ModelStructure`) wait
+until CoreML finishes. `coreml::set_blocking_timeout(Some(duration))` bounds
+them: on timeout the CoreML task is cancelled and `CoreMLError::TimedOut` is
+returned. `Update::run` takes its own timeout. Dropping an async future cancels
+its CoreML task. Stateful predictions take `&mut MLState`, and the bridge also
+serializes predictions and buffer access per state.
+
 ## Examples
 
 The crate ships with 17 headless examples:
@@ -98,7 +119,7 @@ cargo run --example 06_model_configuration
 
 ## Coverage notes
 
-See [COVERAGE.md](COVERAGE.md) and [COVERAGE_AUDIT.md](COVERAGE_AUDIT.md) for the SDK audit. `coreml` 0.3.4 now covers all 92 audited public macOS CoreML top-level symbols, including Rust-backed `MLCustomLayer` and `MLCustomModel` authoring callbacks, plus executor-agnostic async compilation and stateful-prediction helpers.
+See [COVERAGE.md](COVERAGE.md) and [COVERAGE_AUDIT.md](COVERAGE_AUDIT.md) for the SDK audit. The audit counts the 92 top-level Objective-C CoreML symbols (classes, protocols, enums, constants and functions), not individual methods, so its 100% figure does not mean every method is wrapped. Not wrapped: `MLTensor` and `MLShapedArray` (Swift-only), `MLPredictionOptions.outputBackings`, image features from `CGImage` or `CVPixelBuffer` conversion, and the custom-stride, data-pointer and pixel-buffer `MLMultiArray` initializers.
 
 ## License
 
