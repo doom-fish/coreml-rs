@@ -68,7 +68,7 @@ func cm_feature_description_object(_ description: MLFeatureDescription) -> [Stri
   if let multiArrayConstraint = description.multiArrayConstraint {
     var multiArrayObject: [String: Any] = [
       "shape": multiArrayConstraint.shape.map(\.intValue),
-      "data_type": cm_multi_array_data_type_name(multiArrayConstraint.dataType),
+      "data_type": cm_multi_array_data_type_object(multiArrayConstraint.dataType),
     ]
     multiArrayObject["shape_constraint"] = cm_multi_array_shape_constraint_object(
       multiArrayConstraint.shapeConstraint
@@ -104,7 +104,7 @@ func cm_feature_description_object(_ description: MLFeatureDescription) -> [Stri
     if #available(macOS 15.0, *), let stateConstraint = description.stateConstraint {
       object["state_constraint"] = [
         "buffer_shape": stateConstraint.bufferShape,
-        "data_type": cm_multi_array_data_type_name(stateConstraint.dataType),
+        "data_type": cm_multi_array_data_type_object(stateConstraint.dataType),
       ]
     }
   #endif

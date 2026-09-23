@@ -53,13 +53,17 @@ fn feature_round_trips_scalars_and_dictionaries() {
 fn feature_wraps_multi_array_values() {
     let mut array = MultiArray::new_f32(&[2]).expect("multi-array should allocate");
     array
-        .copy_from_f32_slice(&[1.0, 2.0])
+        .copy_from_slice(&[1.0_f32, 2.0])
         .expect("multi-array should accept data");
     let feature = Feature::from_multi_array(array).expect("feature should wrap multi-array");
     assert_eq!(feature.feature_type(), FeatureType::MultiArray);
     assert_eq!(
-        feature.multi_array_value().unwrap().as_f32_slice().unwrap(),
-        &[1.0, 2.0]
+        feature
+            .multi_array_value()
+            .unwrap()
+            .to_vec::<f32>()
+            .unwrap(),
+        [1.0, 2.0]
     );
 }
 

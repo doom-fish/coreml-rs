@@ -2,19 +2,16 @@ use coreml::prelude::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut array = MultiArray::new_f32(&[2, 3])?;
-    array.copy_from_f32_slice(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    array.copy_from_slice(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0])?;
 
     assert_eq!(array.shape(), vec![2, 3]);
     assert_eq!(array.strides(), vec![3, 1]);
-    assert_eq!(array.get_f32(&[1, 2]), Some(6.0));
+    assert_eq!(array.get::<f32>(&[1, 2]).ok(), Some(6.0));
 
-    array.set_f32(&[0, 1], 9.0)?;
-    assert_eq!(
-        array.as_f32_slice().unwrap(),
-        &[1.0, 9.0, 3.0, 4.0, 5.0, 6.0]
-    );
+    array.set(&[0, 1], 9.0_f32)?;
+    assert_eq!(array.to_vec::<f32>()?, [1.0, 9.0, 3.0, 4.0, 5.0, 6.0]);
 
-    let expected_tensor = array.as_f32_slice().unwrap().to_vec();
+    let expected_tensor = array.to_vec::<f32>()?;
 
     let mut inputs = FeatureProvider::new();
     inputs.insert_multi_array("tensor", array);
@@ -39,10 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_multi_array("tensor")
         .expect("tensor should exist");
     assert_eq!(round_trip.shape(), vec![2, 3]);
-    assert_eq!(
-        round_trip.as_f32_slice().unwrap(),
-        expected_tensor.as_slice()
-    );
+    assert_eq!(round_trip.to_vec::<f32>()?, expected_tensor);
 
     let configuration = ModelConfiguration::new()
         .with_compute_units(ComputeUnits::CpuOnly)

@@ -12,7 +12,7 @@ use serde_json::Value;
 use crate::error::{from_status_message, from_swift, take_owned_c_string, CoreMLError};
 use crate::ffi;
 use crate::ml_sequence::MLSequence;
-use crate::multi_array::MultiArray;
+use crate::multi_array::{MultiArray, MultiArrayView};
 
 /// Public CoreML feature-value kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -313,11 +313,11 @@ impl Feature {
         (!ptr.is_null()).then(|| take_owned_c_string(ptr))
     }
 
-    /// Retrieve a retained `MultiArray` value when present.
+    /// Retrieve a read-only view of the `MultiArray` value when present.
     #[must_use]
-    pub fn multi_array_value(&self) -> Option<MultiArray> {
+    pub fn multi_array_value(&self) -> Option<MultiArrayView<'_>> {
         let ptr = unsafe { ffi::cm_feature_get_multi_array(self.ptr) };
-        MultiArray::from_raw(ptr)
+        unsafe { MultiArrayView::from_retained(ptr) }
     }
 
     /// Retrieve a retained `MLSequence` value when present.

@@ -183,7 +183,7 @@ func cm_json_string(_ value: Any) -> String {
     }
 }
 
-func cm_multi_array_data_type(from rawValue: Int32) -> MLMultiArrayDataType? {
+func cm_multi_array_data_type(from rawValue: Int) throws -> MLMultiArrayDataType {
     switch rawValue {
     case 0x10000 | 64:
         return .float64
@@ -193,48 +193,31 @@ func cm_multi_array_data_type(from rawValue: Int32) -> MLMultiArrayDataType? {
         return .float16
     case 0x20000 | 32:
         return .int32
+    case 0x20000 | 8:
+        if #available(macOS 26.0, *), let dataType = MLMultiArrayDataType(rawValue: rawValue) {
+            return dataType
+        }
+        throw CMBridgeError.unsupported("Int8 MLMultiArray values require macOS 26.0+")
     default:
-        return nil
+        throw CMBridgeError.invalidArgument("unsupported MLMultiArray data type: \(rawValue)")
     }
 }
 
-func cm_multi_array_data_type_name(_ dataType: MLMultiArrayDataType) -> String {
-    switch dataType {
-    case .float64, .double:
+func cm_multi_array_data_type_object(_ dataType: MLMultiArrayDataType) -> Any {
+    switch dataType.rawValue {
+    case 0x10000 | 64:
         return "float64"
-    case .float32, .float:
+    case 0x10000 | 32:
         return "float32"
-    case .float16:
+    case 0x10000 | 16:
         return "float16"
-    case .int32:
+    case 0x20000 | 32:
         return "int32"
+    case 0x20000 | 8:
+        return "int8"
     default:
-        return "unknown"
+        return ["unknown": dataType.rawValue]
     }
-}
-
-func cm_multi_array_element_size(_ dataType: MLMultiArrayDataType) -> Int? {
-    switch dataType {
-    case .float64, .double:
-        return MemoryLayout<Double>.size
-    case .float32, .float:
-        return MemoryLayout<Float>.size
-    case .float16:
-        return MemoryLayout<UInt16>.size
-    case .int32:
-        return MemoryLayout<Int32>.size
-    default:
-        return nil
-    }
-}
-
-func cm_copy_multi_array(_ array: MLMultiArray) throws -> MLMultiArray {
-    guard let elementSize = cm_multi_array_element_size(array.dataType) else {
-        throw CMBridgeError.operationFailed("unsupported MLMultiArray data type \(array.dataType.rawValue)")
-    }
-    let copy = try MLMultiArray(shape: array.shape, dataType: array.dataType)
-    copy.dataPointer.copyMemory(from: array.dataPointer, byteCount: elementSize * array.count)
-    return copy
 }
 
 func cm_feature_type(from rawValue: Int32) -> MLFeatureType? {

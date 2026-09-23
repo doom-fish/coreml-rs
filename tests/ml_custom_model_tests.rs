@@ -51,7 +51,6 @@ fn input_provider(value: f64) -> FeatureProvider {
 }
 
 #[test]
-#[ignore = "run via examples/17_ml_custom_model.rs; direct integration-test worker threads crash CoreML custom callbacks"]
 fn custom_model_registration_round_trips_single_and_batch_predictions() {
     let registration = MLCustomModelRegistration::register("RustTestScaleModel", |context| {
         let scale = context

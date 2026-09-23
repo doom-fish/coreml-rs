@@ -55,7 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = Model::load_from_url("MyModel.mlmodelc", &configuration)?;
 
     let mut tensor = MultiArray::new_f32(&[1, 3, 224, 224])?;
-    tensor.copy_from_f32_slice(&vec![0.0; tensor.len()])?;
+    let pixels = vec![0.0_f32; tensor.len()];
+    tensor.copy_from_slice(&pixels)?;
 
     let mut inputs = FeatureProvider::new();
     inputs.insert_multi_array("image", tensor);

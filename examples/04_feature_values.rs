@@ -18,15 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let mut array = MultiArray::new_f32(&[2])?;
-    array.copy_from_f32_slice(&[1.0, 2.0])?;
+    array.copy_from_slice(&[1.0_f32, 2.0])?;
     let array_feature = Feature::from_multi_array(array)?;
     assert_eq!(
-        array_feature
-            .multi_array_value()
-            .unwrap()
-            .as_f32_slice()
-            .unwrap(),
-        &[1.0, 2.0]
+        array_feature.multi_array_value().unwrap().to_vec::<f32>()?,
+        [1.0, 2.0]
     );
 
     let sequence = MLSequence::from_strings(&["cat", "dog"])?;

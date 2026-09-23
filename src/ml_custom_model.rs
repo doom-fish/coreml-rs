@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 
 use libc::strdup;
 use serde::de::DeserializeOwned;
@@ -64,7 +64,7 @@ type ModelFactory =
     dyn Fn(MLCustomModelInitContext) -> Result<Box<dyn MLCustomModel>, CoreMLError> + Send + Sync;
 
 struct ModelInstanceBox {
-    inner: Box<dyn MLCustomModel>,
+    inner: Mutex<Box<dyn MLCustomModel>>,
 }
 
 /// Lifetime guard for one registered Objective-C custom-model class.
@@ -291,7 +291,10 @@ pub unsafe extern "C" fn cm_rust_custom_model_create(
         };
         let factory = lookup_factory(&class_name)?;
         let model = factory(context)?;
-        *out_context = Box::into_raw(Box::new(ModelInstanceBox { inner: model })).cast();
+        *out_context = Box::into_raw(Box::new(ModelInstanceBox {
+            inner: Mutex::new(model),
+        }))
+        .cast();
         Ok(())
     })
 }
@@ -313,7 +316,6 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict(
         }
         *out_provider = ptr::null_mut();
 
-        let model = model_from_ptr(context)?;
         let input = FeatureProvider::from_raw(input).ok_or_else(|| {
             CoreMLError::InvalidArgument(
                 "custom-model prediction received a null feature-provider pointer".to_owned(),
@@ -324,7 +326,7 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict(
         // borrowed. Suppress `FeatureProvider::Drop` to avoid an over-release.
         let input = core::mem::ManuallyDrop::new(input);
         let options = parse_json::<PredictionOptions>(prediction_options_json)?;
-        let output = model.inner.prediction_from_features(&input, &options)?;
+        let output = lock_model(context)?.prediction_from_features(&input, &options)?;
         *out_provider = output.ptr;
         std::mem::forget(output);
         Ok(())
@@ -348,7 +350,6 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict_batch(
         }
         *out_batch = ptr::null_mut();
 
-        let model = model_from_ptr(context)?;
         let batch = BatchProvider::from_raw(batch).ok_or_else(|| {
             CoreMLError::InvalidArgument(
                 "custom-model batch prediction received a null batch-provider pointer".to_owned(),
@@ -358,7 +359,7 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict_batch(
         // suppress `BatchProvider::Drop` to avoid an over-release.
         let batch = core::mem::ManuallyDrop::new(batch);
         let options = parse_json::<PredictionOptions>(prediction_options_json)?;
-        let output = model.inner.predictions_from_batch(&batch, &options)?;
+        let output = lock_model(context)?.predictions_from_batch(&batch, &options)?;
         *out_batch = output.ptr;
         std::mem::forget(output);
         Ok(())
@@ -393,15 +394,19 @@ fn lookup_factory(class_name: &str) -> Result<Arc<ModelFactory>, CoreMLError> {
         })
 }
 
-unsafe fn model_from_ptr<'a>(
+unsafe fn lock_model<'a>(
     context: *mut c_void,
-) -> Result<&'a mut ModelInstanceBox, CoreMLError> {
-    if context.is_null() {
+) -> Result<MutexGuard<'a, Box<dyn MLCustomModel>>, CoreMLError> {
+    let Some(instance) = (unsafe { context.cast::<ModelInstanceBox>().as_ref() }) else {
         return Err(CoreMLError::InvalidArgument(
             "custom-model callback received a null instance pointer".to_owned(),
         ));
-    }
-    Ok(&mut *context.cast::<ModelInstanceBox>())
+    };
+    instance.inner.lock().map_err(|_| {
+        CoreMLError::CustomModelFailed(
+            "custom-model instance is unusable after an earlier callback panicked".to_owned(),
+        )
+    })
 }
 
 fn c_string(value: &str, label: &str) -> Result<CString, CoreMLError> {

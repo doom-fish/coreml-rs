@@ -8,7 +8,7 @@ use apple_cf::cv::CVPixelBuffer;
 use crate::error::{from_status_message, take_owned_c_string, CoreMLError};
 use crate::feature::{Feature, FeatureType};
 use crate::ffi;
-use crate::multi_array::MultiArray;
+use crate::multi_array::{MultiArray, MultiArrayView};
 
 /// Mutable dictionary-style model input / output bag.
 pub struct FeatureProvider {
@@ -165,12 +165,12 @@ impl FeatureProvider {
         Feature::from_raw(ptr)
     }
 
-    /// Fetch a retained `MLMultiArray` value.
+    /// Fetch a read-only view of an `MLMultiArray` value.
     #[must_use]
-    pub fn get_multi_array(&self, name: &str) -> Option<MultiArray> {
+    pub fn get_multi_array(&self, name: &str) -> Option<MultiArrayView<'_>> {
         let name = CString::new(name).ok()?;
         let ptr = unsafe { ffi::cm_feature_provider_get_multi_array(self.ptr, name.as_ptr()) };
-        MultiArray::from_raw(ptr)
+        unsafe { MultiArrayView::from_retained(ptr) }
     }
 
     /// Fetch a string value.

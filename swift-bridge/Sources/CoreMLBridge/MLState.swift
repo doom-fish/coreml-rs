@@ -1,6 +1,11 @@
 import CoreML
 import Foundation
 
+public typealias CMStateMultiArrayCallback = @convention(c) (
+    UnsafeMutableRawPointer?,
+    UnsafeMutableRawPointer?
+) -> Void
+
 #if COREML_HAS_MACOS15_SDK
     @_cdecl("cm_state_runtime_supported")
     public func cm_state_runtime_supported() -> Bool {
@@ -103,39 +108,23 @@ import Foundation
         box.fail(status: CM_UNSUPPORTED, message: "MLState requires macOS 15.0+")
     }
 
-    @_cdecl("cm_state_snapshot_multi_array")
-    public func cm_state_snapshot_multi_array(
+    @_cdecl("cm_state_with_multi_array")
+    public func cm_state_with_multi_array(
         _ statePtr: UnsafeMutableRawPointer?,
         _ namePtr: UnsafePointer<CChar>?,
-        _ outArray: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
+        _ callback: CMStateMultiArrayCallback,
+        _ context: UnsafeMutableRawPointer?,
         _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
     ) -> Int32 {
-        outArray.pointee = nil
         guard let statePtr, let namePtr else {
             cm_write_error(errorOut, "state and state name must not be null")
             return CM_INVALID_ARGUMENT
         }
         if #available(macOS 15.0, *) {
             let state: MLState = cm_borrow(statePtr)
-            let stateName = String(cString: namePtr)
-            var copiedArray: MLMultiArray?
-            var capturedError: Error?
-            state.withMultiArray(for: stateName) { buffer in
-                do {
-                    copiedArray = try cm_copy_multi_array(buffer)
-                } catch {
-                    capturedError = error
-                }
+            state.withMultiArray(for: String(cString: namePtr)) { buffer in
+                callback(Unmanaged.passUnretained(buffer).toOpaque(), context)
             }
-            if let capturedError {
-                cm_write_error(errorOut, capturedError.localizedDescription)
-                return cm_status_code(for: capturedError, fallback: CM_STATE_FAILED)
-            }
-            guard let copiedArray else {
-                cm_write_error(errorOut, "state buffer '\(stateName)' was unavailable")
-                return CM_STATE_FAILED
-            }
-            outArray.pointee = cm_retain(copiedArray)
             return CM_OK
         }
         cm_write_error(errorOut, "MLState requires macOS 15.0+")
@@ -183,14 +172,14 @@ import Foundation
         box.fail(status: CM_UNSUPPORTED, message: "MLState requires a macOS 15.0+ SDK")
     }
 
-    @_cdecl("cm_state_snapshot_multi_array")
-    public func cm_state_snapshot_multi_array(
+    @_cdecl("cm_state_with_multi_array")
+    public func cm_state_with_multi_array(
         _: UnsafeMutableRawPointer?,
         _: UnsafePointer<CChar>?,
-        _ outArray: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
+        _: CMStateMultiArrayCallback,
+        _: UnsafeMutableRawPointer?,
         _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
     ) -> Int32 {
-        outArray.pointee = nil
         cm_write_error(errorOut, "MLState requires a macOS 15.0+ SDK")
         return CM_UNSUPPORTED
     }

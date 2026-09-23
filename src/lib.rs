@@ -88,7 +88,9 @@ pub use model_structure::{
     ModelStructureProgramFunction, ModelStructureProgramNamedValueType,
     ModelStructureProgramOperation, ModelStructureProgramValue, ModelStructureProgramValueType,
 };
-pub use multi_array::{DataType, MultiArray, MultiArrayScalar};
+pub use multi_array::{
+    DataType, MultiArray, MultiArrayElement, MultiArrayRef, MultiArrayScalar, MultiArrayView,
+};
 pub use prediction::{PredictionOptions, PredictionOptionsBridgeSnapshot};
 pub use update::{
     Update, UpdateContext, UpdateEvent, UpdateProgressHandlers, UpdateResult, UpdateTaskState,
@@ -138,7 +140,9 @@ pub mod prelude {
         ModelStructureProgramFunction, ModelStructureProgramNamedValueType,
         ModelStructureProgramOperation, ModelStructureProgramValue, ModelStructureProgramValueType,
     };
-    pub use crate::multi_array::{DataType, MultiArray, MultiArrayScalar};
+    pub use crate::multi_array::{
+        DataType, MultiArray, MultiArrayElement, MultiArrayRef, MultiArrayScalar, MultiArrayView,
+    };
     pub use crate::prediction::{PredictionOptions, PredictionOptionsBridgeSnapshot};
     pub use crate::update::{
         Update, UpdateContext, UpdateEvent, UpdateProgressHandlers, UpdateResult, UpdateTaskState,

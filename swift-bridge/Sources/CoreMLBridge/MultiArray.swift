@@ -1,33 +1,40 @@
 import CoreML
 import Foundation
 
+public typealias CMMultiArrayAccessCallback = @convention(c) (
+  UnsafeMutableRawPointer?,
+  Int,
+  UnsafePointer<Int>?,
+  Int,
+  UnsafeMutableRawPointer?
+) -> Void
+
 @_cdecl("cm_multi_array_new")
 public func cm_multi_array_new(
   _ shapePtr: UnsafePointer<Int64>?,
   _ rank: Int,
-  _ dataTypeRaw: Int32,
+  _ dataTypeRaw: Int,
   _ outArray: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
   _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 ) -> Int32 {
   outArray.pointee = nil
-  guard let shapePtr else {
+  guard let shapePtr, rank >= 0 else {
     cm_write_error(errorOut, "shape pointer must not be null")
     return CM_INVALID_ARGUMENT
   }
-  guard let dataType = cm_multi_array_data_type(from: dataTypeRaw) else {
-    cm_write_error(errorOut, "unsupported MLMultiArray data type: \(dataTypeRaw)")
-    return CM_INVALID_ARGUMENT
-  }
-
-  let shape = (0..<rank).map { NSNumber(value: shapePtr[$0]) }
 
   do {
+    let dataType = try cm_multi_array_data_type(from: dataTypeRaw)
+    let shape = (0..<rank).map { NSNumber(value: shapePtr[$0]) }
     let array = try MLMultiArray(shape: shape, dataType: dataType)
+    array.withUnsafeMutableBytes { buffer, _ in
+      _ = buffer.initializeMemory(as: UInt8.self, repeating: 0)
+    }
     outArray.pointee = cm_retain(array)
     return CM_OK
   } catch {
     cm_write_error(errorOut, error.localizedDescription)
-    return CM_MULTI_ARRAY_FAILED
+    return cm_status_code(for: error, fallback: CM_MULTI_ARRAY_FAILED)
   }
 }
 
@@ -36,18 +43,21 @@ public func cm_multi_array_concat(
   _ arraysPtr: UnsafePointer<UnsafeMutableRawPointer?>?,
   _ len: Int,
   _ axis: Int,
-  _ dataTypeRaw: Int32,
+  _ dataTypeRaw: Int,
   _ outArray: UnsafeMutablePointer<UnsafeMutableRawPointer?>,
   _ errorOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 ) -> Int32 {
   outArray.pointee = nil
-  guard let arraysPtr else {
-    cm_write_error(errorOut, "multi-array list must not be null")
+  guard let arraysPtr, len > 0 else {
+    cm_write_error(errorOut, "multi-array list must not be null or empty")
     return CM_INVALID_ARGUMENT
   }
-  guard let dataType = cm_multi_array_data_type(from: dataTypeRaw) else {
-    cm_write_error(errorOut, "unsupported MLMultiArray data type: \(dataTypeRaw)")
-    return CM_INVALID_ARGUMENT
+  let dataType: MLMultiArrayDataType
+  do {
+    dataType = try cm_multi_array_data_type(from: dataTypeRaw)
+  } catch {
+    cm_write_error(errorOut, error.localizedDescription)
+    return cm_status_code(for: error, fallback: CM_INVALID_ARGUMENT)
   }
 
   var arrays: [MLMultiArray] = []
@@ -98,10 +108,10 @@ public func cm_multi_array_count(_ arrayPtr: UnsafeMutableRawPointer?) -> Int {
 }
 
 @_cdecl("cm_multi_array_data_type")
-public func cm_multi_array_data_type(_ arrayPtr: UnsafeMutableRawPointer?) -> Int32 {
+public func cm_multi_array_data_type(_ arrayPtr: UnsafeMutableRawPointer?) -> Int {
   guard let arrayPtr else { return 0 }
   let array: MLMultiArray = cm_borrow(arrayPtr)
-  return Int32(array.dataType.rawValue)
+  return array.dataType.rawValue
 }
 
 @_cdecl("cm_multi_array_rank")
@@ -141,11 +151,34 @@ public func cm_multi_array_copy_strides(
   return count
 }
 
-@_cdecl("cm_multi_array_data_pointer")
-public func cm_multi_array_data_pointer(_ arrayPtr: UnsafeMutableRawPointer?)
-  -> UnsafeMutableRawPointer?
-{
-  guard let arrayPtr else { return nil }
+@_cdecl("cm_multi_array_access_bytes")
+public func cm_multi_array_access_bytes(
+  _ arrayPtr: UnsafeMutableRawPointer?,
+  _ mutable: Bool,
+  _ callback: CMMultiArrayAccessCallback,
+  _ context: UnsafeMutableRawPointer?
+) -> Int32 {
+  guard let arrayPtr else { return CM_INVALID_ARGUMENT }
   let array: MLMultiArray = cm_borrow(arrayPtr)
-  return array.dataPointer
+  if mutable {
+    array.withUnsafeMutableBytes { buffer, strides in
+      strides.withUnsafeBufferPointer { strideBuffer in
+        callback(buffer.baseAddress, buffer.count, strideBuffer.baseAddress, strideBuffer.count, context)
+      }
+    }
+  } else {
+    let strides = array.strides.map(\.intValue)
+    array.withUnsafeBytes { buffer in
+      strides.withUnsafeBufferPointer { strideBuffer in
+        callback(
+          UnsafeMutableRawPointer(mutating: buffer.baseAddress),
+          buffer.count,
+          strideBuffer.baseAddress,
+          strideBuffer.count,
+          context
+        )
+      }
+    }
+  }
+  return CM_OK
 }

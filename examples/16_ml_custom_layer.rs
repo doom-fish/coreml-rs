@@ -12,8 +12,8 @@ impl MLCustomLayer for ScaleAndBiasLayer {
 
     fn evaluate_on_cpu(
         &mut self,
-        _inputs: &[MultiArray],
-        _outputs: &mut [MultiArray],
+        _inputs: &[&MultiArrayRef],
+        _outputs: &mut [&mut MultiArrayRef],
     ) -> Result<(), CoreMLError> {
         Ok(())
     }

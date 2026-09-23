@@ -32,25 +32,45 @@ impl MLCustomLayer for AffineLayer {
 
     fn evaluate_on_cpu(
         &mut self,
-        inputs: &[MultiArray],
-        outputs: &mut [MultiArray],
+        inputs: &[&MultiArrayRef],
+        outputs: &mut [&mut MultiArrayRef],
     ) -> Result<(), CoreMLError> {
-        let input = inputs
-            .first()
-            .and_then(MultiArray::as_f32_slice)
-            .ok_or_else(|| {
-                CoreMLError::CustomLayerFailed("expected one Float32 input tensor".to_owned())
-            })?;
-        let output = outputs
-            .first_mut()
-            .and_then(MultiArray::as_f32_slice_mut)
-            .ok_or_else(|| {
-                CoreMLError::CustomLayerFailed("expected one Float32 output tensor".to_owned())
-            })?;
-        for (dst, src) in output.iter_mut().zip(input) {
-            *dst = (*src).mul_add(self.scale, self.bias);
-        }
-        Ok(())
+        let [input] = inputs else {
+            return Err(CoreMLError::CustomLayerFailed(
+                "expected one Float32 input tensor".to_owned(),
+            ));
+        };
+        let [output] = outputs else {
+            return Err(CoreMLError::CustomLayerFailed(
+                "expected one Float32 output tensor".to_owned(),
+            ));
+        };
+        let values: Vec<f32> = input
+            .to_vec::<f32>()?
+            .into_iter()
+            .map(|value| value.mul_add(self.scale, self.bias))
+            .collect();
+        output.copy_from_slice(&values)
+    }
+}
+
+struct PanickingLayer;
+
+impl MLCustomLayer for PanickingLayer {
+    fn output_shapes_for_input_shapes(
+        &self,
+        input_shapes: &[Vec<usize>],
+    ) -> Result<Vec<Vec<usize>>, CoreMLError> {
+        Ok(input_shapes.to_vec())
+    }
+
+    fn evaluate_on_cpu(
+        &mut self,
+        _inputs: &[&MultiArrayRef],
+        outputs: &mut [&mut MultiArrayRef],
+    ) -> Result<(), CoreMLError> {
+        outputs[0].set(&[0], 42.0_f32)?;
+        panic!("custom layer exploded");
     }
 }
 
@@ -59,7 +79,6 @@ fn layer_parameters(scale: f32) -> BTreeMap<String, Value> {
 }
 
 #[test]
-#[ignore = "run via examples/16_ml_custom_layer.rs; direct integration-test worker threads crash CoreML custom callbacks"]
 fn custom_layer_registration_round_trips_cpu_callbacks() {
     let registration = MLCustomLayerRegistration::register("RustTestAffineLayer", |context| {
         let scale = context
@@ -86,17 +105,14 @@ fn custom_layer_registration_round_trips_cpu_callbacks() {
 
     let mut input = MultiArray::new_f32(&[3]).expect("input tensor should allocate");
     input
-        .copy_from_f32_slice(&[1.0, 2.0, -1.0])
+        .copy_from_slice(&[1.0_f32, 2.0, -1.0])
         .expect("input tensor should fill");
     let mut output = MultiArray::new_f32(&[3]).expect("output tensor should allocate");
     layer
-        .evaluate_on_cpu(
-            std::slice::from_ref(&input),
-            std::slice::from_mut(&mut output),
-        )
+        .evaluate_on_cpu(&[&input], &mut [&mut output])
         .expect("custom layer should run on CPU");
 
-    assert_eq!(output.as_f32_slice(), Some(&[3.5, 5.5, -0.5][..]));
+    assert_eq!(output.to_vec::<f32>().unwrap(), [3.5, 5.5, -0.5]);
 }
 
 #[test]
@@ -118,4 +134,30 @@ fn custom_layer_registration_rejects_duplicate_class_names() {
     .expect_err("duplicate custom layer registrations must fail");
 
     assert!(matches!(error, CoreMLError::InvalidArgument(_)));
+}
+
+#[test]
+fn custom_layer_panics_become_errors_without_releasing_lent_arrays() {
+    let registration =
+        MLCustomLayerRegistration::register("RustPanickingLayer", |_context| Ok(PanickingLayer))
+            .expect("custom layer should register");
+    let mut layer = registration
+        .instantiate(&BTreeMap::new())
+        .expect("custom layer should instantiate");
+
+    let input = MultiArray::new_f32(&[2]).expect("input tensor should allocate");
+    let mut output = MultiArray::new_f32(&[2]).expect("output tensor should allocate");
+    for _ in 0..3 {
+        let error = layer
+            .evaluate_on_cpu(&[&input], &mut [&mut output])
+            .expect_err("a panicking layer must report an error");
+        assert!(matches!(error, CoreMLError::CustomLayerFailed(_)), "{error}");
+    }
+    drop(layer);
+
+    assert_eq!(output.to_vec::<f32>().unwrap(), [42.0, 0.0]);
+    assert_eq!(input.to_vec::<f32>().unwrap(), [0.0, 0.0]);
+    let copy = output.copy_to_owned().unwrap();
+    drop(output);
+    assert_eq!(copy.to_vec::<f32>().unwrap(), [42.0, 0.0]);
 }

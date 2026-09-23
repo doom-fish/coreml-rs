@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::ptr::NonNull;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 
 use libc::strdup;
 use serde::de::DeserializeOwned;
@@ -14,7 +15,7 @@ use serde_json::Value;
 
 use crate::error::{from_swift, take_owned_c_string, CoreMLError};
 use crate::ffi;
-use crate::multi_array::MultiArray;
+use crate::multi_array::MultiArrayRef;
 
 /// Initialization context supplied when CoreML constructs a custom layer instance.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -42,8 +43,8 @@ pub trait MLCustomLayer: Send {
     /// Execute the layer on CPU-backed `MLMultiArray` values.
     fn evaluate_on_cpu(
         &mut self,
-        inputs: &[MultiArray],
-        outputs: &mut [MultiArray],
+        inputs: &[&MultiArrayRef],
+        outputs: &mut [&mut MultiArrayRef],
     ) -> Result<(), CoreMLError>;
 
     /// Optional GPU callback receiving raw Metal object pointers.
@@ -74,7 +75,7 @@ type LayerFactory =
     dyn Fn(MLCustomLayerInitContext) -> Result<Box<dyn MLCustomLayer>, CoreMLError> + Send + Sync;
 
 struct LayerInstanceBox {
-    inner: Box<dyn MLCustomLayer>,
+    inner: Mutex<Box<dyn MLCustomLayer>>,
 }
 
 /// Lifetime guard for one registered Objective-C custom-layer class.
@@ -263,18 +264,11 @@ impl MLCustomLayerHandle {
     /// Returns an error if the bridge rejects the arrays or the Rust callback fails.
     pub fn evaluate_on_cpu(
         &mut self,
-        inputs: &[MultiArray],
-        outputs: &mut [MultiArray],
+        inputs: &[&MultiArrayRef],
+        outputs: &mut [&mut MultiArrayRef],
     ) -> Result<(), CoreMLError> {
-        let input_ptrs: Vec<*mut c_void> = inputs.iter().map(MultiArray::as_ptr).collect();
-        let mut temporary_outputs: Vec<MultiArray> = outputs
-            .iter()
-            .map(|output| MultiArray::new(&output.shape(), output.data_type()))
-            .collect::<Result<_, _>>()?;
-        let output_ptrs: Vec<*mut c_void> = temporary_outputs
-            .iter_mut()
-            .map(|array| array.as_ptr())
-            .collect();
+        let input_ptrs: Vec<*mut c_void> = inputs.iter().map(|input| input.as_ptr()).collect();
+        let output_ptrs: Vec<*mut c_void> = outputs.iter().map(|output| output.as_ptr()).collect();
         let mut error = ptr::null_mut();
         let status = unsafe {
             ffi::cm_custom_layer_evaluate_cpu(
@@ -288,9 +282,6 @@ impl MLCustomLayerHandle {
         };
         if status != ffi::status::OK {
             return Err(from_swift(status, error));
-        }
-        for (temporary_output, output) in temporary_outputs.iter().zip(outputs.iter_mut()) {
-            temporary_output.transfer_to(output)?;
         }
         Ok(())
     }
@@ -339,7 +330,10 @@ pub unsafe extern "C" fn cm_rust_custom_layer_create(
         let factory = lookup_factory(&class_name)?;
         let layer = factory(context)?;
         let flags = u32::from(layer.supports_gpu_encoding());
-        *out_context = Box::into_raw(Box::new(LayerInstanceBox { inner: layer })).cast();
+        *out_context = Box::into_raw(Box::new(LayerInstanceBox {
+            inner: Mutex::new(layer),
+        }))
+        .cast();
         *out_flags = flags;
         Ok(())
     })
@@ -355,9 +349,8 @@ pub unsafe extern "C" fn cm_rust_custom_layer_set_weight_data(
     error_out: *mut *mut c_char,
 ) -> i32 {
     ffi_callback(error_out, || {
-        let layer = layer_from_ptr(context)?;
         let weights = byte_vectors(weight_data, weight_lengths, weight_count)?;
-        layer.inner.set_weight_data(&weights)
+        lock_layer(context)?.set_weight_data(&weights)
     })
 }
 
@@ -377,9 +370,8 @@ pub unsafe extern "C" fn cm_rust_custom_layer_output_shapes_json(
         }
         *out_json = ptr::null_mut();
 
-        let layer = layer_from_ptr(context)?;
         let input_shapes = parse_json::<Vec<Vec<usize>>>(input_shapes_json)?;
-        let output_shapes = layer.inner.output_shapes_for_input_shapes(&input_shapes)?;
+        let output_shapes = lock_layer(context)?.output_shapes_for_input_shapes(&input_shapes)?;
         let json = serde_json::to_string(&output_shapes).map_err(|error| {
             CoreMLError::CustomLayerFailed(format!(
                 "failed to encode custom-layer output shapes: {error}"
@@ -401,30 +393,18 @@ pub unsafe extern "C" fn cm_rust_custom_layer_evaluate_cpu(
     error_out: *mut *mut c_char,
 ) -> i32 {
     ffi_callback(error_out, || {
-        let layer = layer_from_ptr(context)?;
-        let input_ptrs = collect_raw_pointers(inputs, input_count, "custom-layer inputs")?;
-        let output_ptrs = collect_raw_pointers(outputs, output_count, "custom-layer outputs")?;
-        // The arrays are borrowed from CoreML: the Swift bridge retains them for
-        // the duration of this call and releases them afterwards. We must build
-        // owning `MultiArray` wrappers to call the user callback, but must not
-        // run `MultiArray::Drop` on them or we would over-release the borrowed
-        // objects. `forget_borrowed_arrays` consumes each `Vec` (freeing its own
-        // backing storage) while leaking the borrowed pointers back to the caller.
-        let input_arrays = multi_arrays_from_raw(&input_ptrs, "custom-layer input")?;
-        let output_arrays = match multi_arrays_from_raw(&output_ptrs, "custom-layer output") {
-            Ok(arrays) => arrays,
-            Err(error) => {
-                forget_borrowed_arrays(input_arrays);
-                return Err(error);
-            }
-        };
-        let mut output_arrays = output_arrays;
-        let result = layer
-            .inner
-            .evaluate_on_cpu(&input_arrays, &mut output_arrays);
-        forget_borrowed_arrays(input_arrays);
-        forget_borrowed_arrays(output_arrays);
-        result
+        let input_ptrs = non_null_pointers(inputs, input_count, "custom-layer input")?;
+        let output_ptrs = non_null_pointers(outputs, output_count, "custom-layer output")?;
+        reject_aliased_arrays(&input_ptrs, &output_ptrs)?;
+        let input_arrays: Vec<&MultiArrayRef> = input_ptrs
+            .iter()
+            .map(|&ptr| unsafe { MultiArrayRef::from_raw(ptr) })
+            .collect();
+        let mut output_arrays: Vec<&mut MultiArrayRef> = output_ptrs
+            .iter()
+            .map(|&ptr| unsafe { MultiArrayRef::from_raw_mut(ptr) })
+            .collect();
+        lock_layer(context)?.evaluate_on_cpu(&input_arrays, &mut output_arrays)
     })
 }
 
@@ -445,14 +425,10 @@ pub unsafe extern "C" fn cm_rust_custom_layer_encode(
                 "custom layer GPU encoding requires a non-null command buffer".to_owned(),
             ));
         }
-        let layer = layer_from_ptr(context)?;
         let input_ptrs = collect_raw_pointers(inputs, input_count, "custom-layer GPU inputs")?;
         let output_ptrs = collect_raw_pointers(outputs, output_count, "custom-layer GPU outputs")?;
-        unsafe {
-            layer
-                .inner
-                .encode_to_command_buffer(command_buffer, &input_ptrs, &output_ptrs)
-        }
+        let mut layer = lock_layer(context)?;
+        unsafe { layer.encode_to_command_buffer(command_buffer, &input_ptrs, &output_ptrs) }
     })
 }
 
@@ -484,15 +460,19 @@ fn lookup_factory(class_name: &str) -> Result<Arc<LayerFactory>, CoreMLError> {
         })
 }
 
-unsafe fn layer_from_ptr<'a>(
+unsafe fn lock_layer<'a>(
     context: *mut c_void,
-) -> Result<&'a mut LayerInstanceBox, CoreMLError> {
-    if context.is_null() {
+) -> Result<MutexGuard<'a, Box<dyn MLCustomLayer>>, CoreMLError> {
+    let Some(instance) = (unsafe { context.cast::<LayerInstanceBox>().as_ref() }) else {
         return Err(CoreMLError::InvalidArgument(
             "custom-layer callback received a null instance pointer".to_owned(),
         ));
-    }
-    Ok(&mut *context.cast::<LayerInstanceBox>())
+    };
+    instance.inner.lock().map_err(|_| {
+        CoreMLError::CustomLayerFailed(
+            "custom-layer instance is unusable after an earlier callback panicked".to_owned(),
+        )
+    })
 }
 
 fn c_string(value: &str, label: &str) -> Result<CString, CoreMLError> {
@@ -589,28 +569,34 @@ fn collect_raw_pointers(
     Ok(unsafe { std::slice::from_raw_parts(values, count) }.to_vec())
 }
 
-fn multi_arrays_from_raw(
-    ptrs: &[*mut c_void],
+fn non_null_pointers(
+    values: *const *mut c_void,
+    count: usize,
     label: &str,
-) -> Result<Vec<MultiArray>, CoreMLError> {
-    ptrs.iter()
+) -> Result<Vec<NonNull<c_void>>, CoreMLError> {
+    collect_raw_pointers(values, count, label)?
+        .into_iter()
         .enumerate()
-        .map(|(index, &ptr)| {
-            MultiArray::from_raw(ptr).ok_or_else(|| {
+        .map(|(index, ptr)| {
+            NonNull::new(ptr).ok_or_else(|| {
                 CoreMLError::InvalidArgument(format!("{label} {index} must not be null"))
             })
         })
         .collect()
 }
 
-/// Consume a vector of `MultiArray` wrappers that were built from pointers
-/// borrowed from CoreML, freeing the vector's own backing storage while
-/// suppressing `MultiArray::Drop` (which would over-release the borrowed
-/// objects the Swift bridge still owns).
-fn forget_borrowed_arrays(arrays: Vec<MultiArray>) {
-    for array in arrays {
-        core::mem::forget(array);
+fn reject_aliased_arrays(
+    inputs: &[NonNull<c_void>],
+    outputs: &[NonNull<c_void>],
+) -> Result<(), CoreMLError> {
+    for (index, output) in outputs.iter().enumerate() {
+        if outputs[..index].contains(output) || inputs.contains(output) {
+            return Err(CoreMLError::CustomLayerFailed(format!(
+                "custom-layer output {index} aliases another input or output array"
+            )));
+        }
     }
+    Ok(())
 }
 
 fn ffi_callback(
@@ -647,4 +633,22 @@ fn duplicate_c_string(message: &str) -> *mut c_char {
             .expect("static strings are valid")
     });
     unsafe { strdup(c_string.as_ptr()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::ffi::c_void;
+    use std::ptr::NonNull;
+
+    use super::reject_aliased_arrays;
+
+    #[test]
+    fn aliased_outputs_are_rejected() {
+        let slots = [0_u8; 3];
+        let pointer = |index: usize| NonNull::from(&slots[index]).cast::<c_void>();
+        assert!(reject_aliased_arrays(&[pointer(0)], &[pointer(1), pointer(2)]).is_ok());
+        assert!(reject_aliased_arrays(&[pointer(0), pointer(0)], &[pointer(1)]).is_ok());
+        assert!(reject_aliased_arrays(&[pointer(0)], &[pointer(0)]).is_err());
+        assert!(reject_aliased_arrays(&[], &[pointer(1), pointer(1)]).is_err());
+    }
 }
