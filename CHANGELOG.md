@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bridge JSON (update progress and completion contexts, dictionary features, custom-layer and custom-model parameters, configuration parameters and description metadata) carries NaN and infinite numbers as the strings `"NaN"`, `"Infinity"` and `"-Infinity"`. A NaN training loss used to collapse the update context to `{}`, so `Update::run` failed and dropped the trained model, and `Feature::string_dictionary_value` and `int64_dictionary_value` returned an empty dictionary when one value was NaN.
 - `MLCustomLayerHandle::output_shapes_for_input_shapes` reports input dimensions above `Int.max` as `InvalidArgument` instead of passing the layer an empty shape list.
 - A panic in the `Drop` of a custom layer or custom model no longer aborts the process when CoreML releases the instance.
+- `build.rs` no longer adds the toolchain's Swift 5.5 back-deployment directory (`usr/lib/swift-5.5/macosx`) to the rpath. The path points into Xcode, so it never made the back-deployment concurrency library available on other machines.
 
 ### Changed
 
