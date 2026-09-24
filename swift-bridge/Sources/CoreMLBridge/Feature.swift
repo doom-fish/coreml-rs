@@ -191,9 +191,9 @@ public func cm_feature_new_int64_dictionary(
 
 @_cdecl("cm_feature_type")
 public func cm_feature_type(_ featurePtr: UnsafeMutableRawPointer?) -> Int32 {
-  guard let featurePtr else { return Int32(MLFeatureType.invalid.rawValue) }
+  guard let featurePtr else { return Int32(clamping: MLFeatureType.invalid.rawValue) }
   let feature: MLFeatureValue = cm_borrow(featurePtr)
-  return Int32(feature.type.rawValue)
+  return Int32(clamping: feature.type.rawValue)
 }
 
 @_cdecl("cm_feature_is_undefined")

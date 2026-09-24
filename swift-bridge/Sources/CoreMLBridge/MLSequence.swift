@@ -57,9 +57,9 @@ public func cm_sequence_new_int64s(
 
 @_cdecl("cm_sequence_type")
 public func cm_sequence_type(_ sequencePtr: UnsafeMutableRawPointer?) -> Int32 {
-  guard let sequencePtr else { return Int32(MLFeatureType.invalid.rawValue) }
+  guard let sequencePtr else { return Int32(clamping: MLFeatureType.invalid.rawValue) }
   let sequence: MLSequence = cm_borrow(sequencePtr)
-  return Int32(sequence.type.rawValue)
+  return Int32(clamping: sequence.type.rawValue)
 }
 
 @_cdecl("cm_sequence_get_strings_json")

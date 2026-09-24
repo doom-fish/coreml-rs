@@ -151,7 +151,7 @@ public func cm_feature_provider_feature_type(
     guard let value = provider.featureValue(for: String(cString: namePtr)) else {
         return -1
     }
-    return Int32(value.type.rawValue)
+    return Int32(clamping: value.type.rawValue)
 }
 
 @_cdecl("cm_feature_provider_get_feature")
