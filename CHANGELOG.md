@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `Model::predict_with_state`, `predict_with_state_and_options` and `predict_with_state_async` take `&mut MLState`.
 - **Breaking:** `Update::run` takes the handlers by value plus a `timeout: Option<Duration>` and returns `UpdateOutcome { model, result }`; `UpdateProgressHandlers` has a lifetime and no longer implements `Clone`, `PartialEq` or serde.
 - **Breaking:** `FeatureProvider::insert_*` and `Model::description` / `detailed_description` return `Result`.
+- **Breaking:** `BatchProvider::try_push` is removed. `push` cannot fail and no longer hides an `expect` on the bridge status.
 - **Breaking:** raw FFI: multi-array data types cross as `NSInteger`; the async exports return a cancellable task handle; the blocking exports take a timeout; `cm_update_run` is replaced by `cm_update_start` / `cm_update_cancel` and `cm_state_snapshot_multi_array` by `cm_state_with_multi_array`.
 - `doom-fish-utils` is a regular dependency. Requires `apple-cf` 0.11 and `doom-fish-utils` 0.4.1; `rust-version` is 1.82.
 
@@ -59,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `FeatureProvider::try_insert_*`; use `insert_*`.
+- `BatchProvider::try_push`; use `push`.
 - The raw `cm_multi_array_data_pointer` export.
 
 ## [0.3.5] - 2026-06-06

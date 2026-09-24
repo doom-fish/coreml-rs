@@ -55,7 +55,7 @@ pub trait MLCustomModel: Send {
                 ))
             })?;
             let output = self.prediction_from_features(&input, options)?;
-            outputs.try_push(output)?;
+            outputs.push(output);
         }
         Ok(outputs)
     }

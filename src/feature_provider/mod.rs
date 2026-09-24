@@ -219,18 +219,8 @@ impl BatchProvider {
 
     /// Append one feature provider to the batch.
     pub fn push(&mut self, provider: FeatureProvider) {
-        self.try_push(provider)
-            .expect("failed to push feature provider into batch");
-    }
-
-    /// Fallible variant of [`push`](Self::push).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the Swift bridge rejects the provider.
-    pub fn try_push(&mut self, provider: FeatureProvider) -> Result<(), CoreMLError> {
         let status = unsafe { ffi::cm_batch_provider_push(self.ptr, provider.ptr) };
-        status_ok(status, "failed to push feature provider into batch")
+        debug_assert_eq!(status, ffi::status::OK);
     }
 
     /// Number of feature providers in the batch.
