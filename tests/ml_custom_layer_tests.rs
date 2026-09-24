@@ -161,3 +161,60 @@ fn custom_layer_panics_become_errors_without_releasing_lent_arrays() {
     drop(output);
     assert_eq!(copy.to_vec::<f32>().unwrap(), [42.0, 0.0]);
 }
+
+struct DropPanickingLayer;
+
+impl MLCustomLayer for DropPanickingLayer {
+    fn output_shapes_for_input_shapes(
+        &self,
+        input_shapes: &[Vec<usize>],
+    ) -> Result<Vec<Vec<usize>>, CoreMLError> {
+        Ok(input_shapes.to_vec())
+    }
+
+    fn evaluate_on_cpu(
+        &mut self,
+        _inputs: &[&MultiArrayRef],
+        _outputs: &mut [&mut MultiArrayRef],
+    ) -> Result<(), CoreMLError> {
+        Ok(())
+    }
+}
+
+impl Drop for DropPanickingLayer {
+    fn drop(&mut self) {
+        panic!("custom layer drop exploded");
+    }
+}
+
+#[test]
+fn custom_layer_panics_while_dropping_are_contained() {
+    let registration =
+        MLCustomLayerRegistration::register("RustDropPanickingLayer", |_context| Ok(DropPanickingLayer))
+            .expect("custom layer should register");
+    for _ in 0..2 {
+        let layer = registration
+            .instantiate(&BTreeMap::new())
+            .expect("custom layer should instantiate");
+        drop(layer);
+    }
+}
+
+#[test]
+fn custom_layer_input_shapes_that_do_not_fit_in_int_are_errors() {
+    let registration = MLCustomLayerRegistration::register("RustShapeCheckingLayer", |_context| {
+        Ok(AffineLayer {
+            scale: 1.0,
+            bias: 0.0,
+        })
+    })
+    .expect("custom layer should register");
+    let layer = registration
+        .instantiate(&BTreeMap::new())
+        .expect("custom layer should instantiate");
+    let error = layer
+        .output_shapes_for_input_shapes(&[vec![usize::MAX]])
+        .expect_err("a dimension above Int.max must not become an empty shape list");
+    assert!(matches!(error, CoreMLError::InvalidArgument(_)), "{error}");
+    assert_eq!(layer.output_shapes_for_input_shapes(&[vec![2, 3]]).unwrap(), [vec![2, 3]]);
+}

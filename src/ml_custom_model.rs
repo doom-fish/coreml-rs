@@ -7,6 +7,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 
+use doom_fish_utils::panic_safe::catch_user_panic;
 use libc::strdup;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -370,7 +371,9 @@ pub unsafe extern "C" fn cm_rust_custom_model_predict_batch(
 #[no_mangle]
 pub unsafe extern "C" fn cm_rust_custom_model_release(context: *mut c_void) {
     if !context.is_null() {
-        drop(Box::from_raw(context.cast::<ModelInstanceBox>()));
+        catch_user_panic("coreml::custom_model_release", || {
+            drop(unsafe { Box::from_raw(context.cast::<ModelInstanceBox>()) });
+        });
     }
 }
 

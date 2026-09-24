@@ -384,7 +384,9 @@ public func cm_custom_layer_output_shapes_json(
     do {
       let json = inputShapesJson.map { String(cString: $0) } ?? "[]"
       let data = json.data(using: String.Encoding.utf8) ?? Data()
-      let rawInputShapes = try JSONSerialization.jsonObject(with: data) as? [[Int]] ?? []
+      guard let rawInputShapes = try JSONSerialization.jsonObject(with: data) as? [[Int]] else {
+        throw CMBridgeError.invalidArgument("custom-layer input shapes must be lists of dimensions that fit in Int")
+      }
       let inputShapes = rawInputShapes.map { shape in shape.map(NSNumber.init(value:)) }
       let outputShapes = try layer.outputShapes(forInputShapes: inputShapes)
       outJson.pointee = cm_string(cm_json_string(outputShapes.map { shape in shape.map { $0.intValue } }))

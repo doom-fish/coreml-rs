@@ -123,3 +123,34 @@ fn custom_model_registration_rejects_duplicate_class_names() {
 
     assert!(matches!(error, CoreMLError::InvalidArgument(_)));
 }
+
+struct DropPanickingModel;
+
+impl MLCustomModel for DropPanickingModel {
+    fn prediction_from_features(
+        &mut self,
+        _input: &FeatureProvider,
+        _options: &PredictionOptions,
+    ) -> Result<FeatureProvider, CoreMLError> {
+        Ok(FeatureProvider::new())
+    }
+}
+
+impl Drop for DropPanickingModel {
+    fn drop(&mut self) {
+        panic!("custom model drop exploded");
+    }
+}
+
+#[test]
+fn custom_model_panics_while_dropping_are_contained() {
+    let registration =
+        MLCustomModelRegistration::register("RustDropPanickingModel", |_context| Ok(DropPanickingModel))
+            .expect("custom model should register");
+    for _ in 0..2 {
+        let model = registration
+            .instantiate(&BTreeMap::new())
+            .expect("custom model should instantiate");
+        drop(model);
+    }
+}

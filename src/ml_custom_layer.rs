@@ -8,6 +8,7 @@ use std::ptr;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 
+use doom_fish_utils::panic_safe::catch_user_panic;
 use libc::strdup;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -436,7 +437,9 @@ pub unsafe extern "C" fn cm_rust_custom_layer_encode(
 #[no_mangle]
 pub unsafe extern "C" fn cm_rust_custom_layer_release(context: *mut c_void) {
     if !context.is_null() {
-        drop(Box::from_raw(context.cast::<LayerInstanceBox>()));
+        catch_user_panic("coreml::custom_layer_release", || {
+            drop(unsafe { Box::from_raw(context.cast::<LayerInstanceBox>()) });
+        });
     }
 }
 
