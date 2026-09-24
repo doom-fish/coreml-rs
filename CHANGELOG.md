@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-array access runs inside `getBytesWithHandler` / `getMutableBytesWithHandler` instead of long-lived slices over the deprecated `dataPointer`; every offset is bounds-checked and follows the strides the handler reports.
 - `MLState::snapshot_multi_array` copies strided state buffers element by element instead of `count` elements linearly.
 - `Model::new_state` no longer leaks every `MLState` and its buffers.
-- Stateful predictions on one `MLState` are serialized, and buffer access waits for predictions still in flight, including those of dropped futures.
+- Stateful predictions on one `MLState` are serialized, and buffer access waits for predictions still in flight, including those of dropped futures. Async predictions wait for the state as queued continuations instead of each blocking a GCD worker thread, so a backlog of timed-out or dropped predictions cannot starve the dispatch pool that the running prediction needs.
 - Custom layer and custom model instances are locked instead of being cast to `&mut` from concurrent CoreML threads.
 - `Update::run` returns the updated model, delivers progress callbacks, and no longer cancels training after a fixed 60 s.
 - The blocking wrappers over CoreML's async APIs no longer fail after a fixed 60 s while the work keeps running; a configured timeout cancels the work and reports `TimedOut`.

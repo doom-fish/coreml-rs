@@ -13,6 +13,7 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
         private var held = false
         private var owner: pthread_t?
         private var depth = 0
+        private var waiters: [CheckedContinuation<Void, Never>] = []
 
         func withThreadAccess<T>(_ body: () throws -> T) rethrows -> T {
             enter()
@@ -22,27 +23,24 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
 
         func acquireForTask() async {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    self.condition.lock()
-                    while self.held {
-                        self.condition.wait()
-                    }
-                    self.held = true
-                    self.owner = nil
-                    self.depth = 1
-                    self.condition.unlock()
+                condition.lock()
+                guard held else {
+                    held = true
+                    owner = nil
+                    depth = 1
+                    condition.unlock()
                     continuation.resume()
+                    return
                 }
+                waiters.append(continuation)
+                condition.unlock()
             }
         }
 
         func releaseFromTask() {
             condition.lock()
-            held = false
-            owner = nil
             depth = 0
-            condition.broadcast()
-            condition.unlock()
+            handOff()
         }
 
         private func enter() {
@@ -63,13 +61,27 @@ public typealias CMStateMultiArrayCallback = @convention(c) (
 
         private func leave() {
             condition.lock()
-            defer { condition.unlock() }
             depth -= 1
-            if depth == 0 {
+            guard depth == 0 else {
+                condition.unlock()
+                return
+            }
+            handOff()
+        }
+
+        private func handOff() {
+            guard !waiters.isEmpty else {
                 held = false
                 owner = nil
                 condition.broadcast()
+                condition.unlock()
+                return
             }
+            let next = waiters.removeFirst()
+            owner = nil
+            depth = 1
+            condition.unlock()
+            next.resume()
         }
     }
 
