@@ -89,6 +89,12 @@ returned. `Update::run` takes its own timeout. Dropping an async future cancels
 its CoreML task. Stateful predictions take `&mut MLState`, and the bridge also
 serializes predictions and buffer access per state.
 
+## Non-finite values
+
+JSON cannot represent NaN or infinity, so the bridge sends them as the strings
+`"NaN"`, `"Infinity"` and `"-Infinity"`: a NaN training loss shows up that way
+in `UpdateContext::metrics`, and dictionary features decode them back to `f64`.
+
 ## Examples
 
 The crate ships with 17 headless examples:

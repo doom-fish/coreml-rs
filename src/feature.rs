@@ -331,9 +331,8 @@ impl Feature {
     #[must_use]
     pub fn string_dictionary_value(&self) -> Option<BTreeMap<String, f64>> {
         let ptr = unsafe { ffi::cm_feature_get_string_dictionary_json(self.ptr) };
-        (!ptr.is_null())
-            .then(|| serde_json::from_str(&take_owned_c_string(ptr)).ok())
-            .flatten()
+        let json = (!ptr.is_null()).then(|| take_owned_c_string(ptr))?;
+        decode_dictionary_values(&json)
     }
 
     /// Retrieve an int-keyed dictionary value when present.
@@ -341,7 +340,7 @@ impl Feature {
     pub fn int64_dictionary_value(&self) -> Option<BTreeMap<i64, f64>> {
         let ptr = unsafe { ffi::cm_feature_get_int64_dictionary_json(self.ptr) };
         let json = (!ptr.is_null()).then(|| take_owned_c_string(ptr))?;
-        let map: BTreeMap<String, f64> = serde_json::from_str(&json).ok()?;
+        let map = decode_dictionary_values(&json)?;
         let mut parsed = BTreeMap::new();
         for (key, value) in map {
             parsed.insert(key.parse().ok()?, value);
@@ -472,6 +471,25 @@ impl TryFrom<&Feature> for Value {
             ))),
         }
     }
+}
+
+fn decode_dictionary_values(json: &str) -> Option<BTreeMap<String, f64>> {
+    let map: BTreeMap<String, Value> = serde_json::from_str(json).ok()?;
+    map.into_iter()
+        .map(|(key, value)| {
+            let number = match &value {
+                Value::Number(number) => number.as_f64(),
+                Value::String(text) => match text.as_str() {
+                    "NaN" => Some(f64::NAN),
+                    "Infinity" => Some(f64::INFINITY),
+                    "-Infinity" => Some(f64::NEG_INFINITY),
+                    _ => None,
+                },
+                _ => None,
+            }?;
+            Some((key, number))
+        })
+        .collect()
 }
 
 fn path_to_c_string(path: impl AsRef<Path>) -> Result<CString, CoreMLError> {

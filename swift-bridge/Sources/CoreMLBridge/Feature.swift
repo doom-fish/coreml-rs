@@ -272,7 +272,7 @@ public func cm_feature_get_string_dictionary_json(_ featurePtr: UnsafeMutableRaw
     }
     stringDictionary[key] = value.doubleValue
   }
-  return cm_string(cm_json_string(stringDictionary))
+  return cm_string(cm_json_string(cm_json_safe(stringDictionary)))
 }
 
 @_cdecl("cm_feature_get_int64_dictionary_json")
@@ -290,7 +290,7 @@ public func cm_feature_get_int64_dictionary_json(_ featurePtr: UnsafeMutableRawP
     }
     intDictionary[String(key.int64Value)] = value.doubleValue
   }
-  return cm_string(cm_json_string(intDictionary))
+  return cm_string(cm_json_string(cm_json_safe(intDictionary)))
 }
 
 @_cdecl("cm_feature_is_equal")

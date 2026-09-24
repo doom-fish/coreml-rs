@@ -95,3 +95,31 @@ fn feature_creates_image_values_from_url() {
         .expect("image feature should build from PNG fixture");
     assert_eq!(feature.feature_type(), FeatureType::Image);
 }
+
+#[test]
+fn dictionary_features_keep_non_finite_values() {
+    let strings = BTreeMap::from([
+        ("nan".to_owned(), f64::NAN),
+        ("inf".to_owned(), f64::INFINITY),
+        ("ninf".to_owned(), f64::NEG_INFINITY),
+        ("one".to_owned(), 1.0),
+    ]);
+    let feature = Feature::from_string_dictionary(&strings).expect("dictionary feature should build");
+    let read = feature
+        .string_dictionary_value()
+        .expect("non-finite values must not hide the dictionary");
+    assert_eq!(read.len(), 4);
+    assert!(read["nan"].is_nan());
+    assert_eq!(read["inf"].to_bits(), f64::INFINITY.to_bits());
+    assert_eq!(read["ninf"].to_bits(), f64::NEG_INFINITY.to_bits());
+    assert_eq!(read["one"].to_bits(), 1.0_f64.to_bits());
+
+    let ints = BTreeMap::from([(1_i64, f64::NAN), (2_i64, 0.5)]);
+    let feature = Feature::from_int64_dictionary(&ints).expect("int-keyed dictionary should build");
+    let read = feature
+        .int64_dictionary_value()
+        .expect("non-finite values must not hide the dictionary");
+    assert_eq!(read.len(), 2);
+    assert!(read[&1].is_nan());
+    assert_eq!(read[&2].to_bits(), 0.5_f64.to_bits());
+}

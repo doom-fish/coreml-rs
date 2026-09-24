@@ -218,6 +218,10 @@ func cm_json_array(from jsonPtr: UnsafePointer<CChar>?) throws -> [Any] {
     return array
 }
 
+func cm_non_finite_name(_ value: Double) -> String {
+    value.isNaN ? "NaN" : (value > 0 ? "Infinity" : "-Infinity")
+}
+
 func cm_json_safe(_ value: Any) -> Any {
     switch value {
     case let dictionary as [String: Any]:
@@ -225,6 +229,9 @@ func cm_json_safe(_ value: Any) -> Any {
     case let array as [Any]:
         return array.map(cm_json_safe)
     case let number as NSNumber:
+        if !number.doubleValue.isFinite {
+            return cm_non_finite_name(number.doubleValue)
+        }
         return number
     case let string as String:
         return string
