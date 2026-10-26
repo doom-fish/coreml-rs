@@ -10,7 +10,7 @@ fn assert_supported_or_unavailable(result: Result<Vec<ComputeDevice>, CoreMLErro
                     | ComputeDeviceKind::NeuralEngine
                     | ComputeDeviceKind::Unknown => {}
                 }
-                assert!(!device.description.is_empty());
+                assert_ne!(device.description, "");
             }
         }
         Err(CoreMLError::Unsupported(_)) => {}

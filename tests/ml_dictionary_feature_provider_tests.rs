@@ -42,5 +42,5 @@ fn inserting_names_or_values_with_nul_bytes_is_an_error_not_a_panic() {
         provider.insert_multi_array("bad\0name", MultiArray::new_f32(&[1]).unwrap()),
         Err(CoreMLError::InvalidArgument(_))
     ));
-    assert!(provider.keys().is_empty());
+    assert_eq!(provider.keys(), [] as [std::string::String; 0]);
 }

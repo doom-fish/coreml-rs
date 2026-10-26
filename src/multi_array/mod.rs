@@ -301,7 +301,12 @@ impl MultiArrayRef {
             return Ok(());
         }
         access_storage(self.as_ptr(), true, |data, len, strides| {
-            scatter(unsafe { bytes_from_raw_mut(data, len) }, &shape, strides, source)
+            scatter(
+                unsafe { bytes_from_raw_mut(data, len) },
+                &shape,
+                strides,
+                source,
+            )
         })
     }
 
@@ -318,19 +323,27 @@ impl MultiArrayRef {
             return Ok(copy);
         }
         let target: &mut MultiArrayRef = &mut copy;
-        access_storage(self.as_ptr(), false, |source, source_len, source_strides| {
-            let source = unsafe { bytes_from_raw(source, source_len) };
-            access_storage(target.as_ptr(), true, |destination, destination_len, destination_strides| {
-                copy_strided(
-                    source,
-                    source_strides,
-                    unsafe { bytes_from_raw_mut(destination, destination_len) },
-                    destination_strides,
-                    &shape,
-                    element_size,
+        access_storage(
+            self.as_ptr(),
+            false,
+            |source, source_len, source_strides| {
+                let source = unsafe { bytes_from_raw(source, source_len) };
+                access_storage(
+                    target.as_ptr(),
+                    true,
+                    |destination, destination_len, destination_strides| {
+                        copy_strided(
+                            source,
+                            source_strides,
+                            unsafe { bytes_from_raw_mut(destination, destination_len) },
+                            destination_strides,
+                            &shape,
+                            element_size,
+                        )
+                    },
                 )
-            })
-        })?;
+            },
+        )?;
         Ok(copy)
     }
 
@@ -858,7 +871,11 @@ fn element_offset(
             indices.len()
         )));
     }
-    if indices.iter().zip(shape).any(|(&index, &dimension)| index >= dimension) {
+    if indices
+        .iter()
+        .zip(shape)
+        .any(|(&index, &dimension)| index >= dimension)
+    {
         return Err(CoreMLError::IndexOutOfRange(
             "indices are outside the multi-array shape".to_owned(),
         ));
@@ -887,7 +904,10 @@ fn storage_offset(indices: &[usize], strides: &[usize]) -> Result<usize, CoreMLE
         })
 }
 
-fn element_byte_range<T>(offset: usize, len: usize) -> Result<core::ops::Range<usize>, CoreMLError> {
+fn element_byte_range<T>(
+    offset: usize,
+    len: usize,
+) -> Result<core::ops::Range<usize>, CoreMLError> {
     let size = core::mem::size_of::<T>();
     offset
         .checked_mul(size)
@@ -1017,7 +1037,10 @@ fn copy_strided(
     };
     for_each_index(shape, |indices| {
         let from = byte_range(storage_offset(indices, source_strides)?, source.len())?;
-        let to = byte_range(storage_offset(indices, destination_strides)?, destination.len())?;
+        let to = byte_range(
+            storage_offset(indices, destination_strides)?,
+            destination.len(),
+        )?;
         destination[to].copy_from_slice(&source[from]);
         Ok(())
     })
@@ -1096,7 +1119,10 @@ mod tests {
     use crate::error::CoreMLError;
 
     fn f32_bytes(values: &[f32]) -> Vec<u8> {
-        values.iter().flat_map(|value| value.to_ne_bytes()).collect()
+        values
+            .iter()
+            .flat_map(|value| value.to_ne_bytes())
+            .collect()
     }
 
     #[test]
@@ -1111,7 +1137,10 @@ mod tests {
             assert_eq!(DataType::from_ffi(data_type.as_ffi()), data_type);
         }
         assert_eq!(DataType::from_ffi(0x20000 | 8), DataType::Int8);
-        assert_eq!(DataType::from_ffi(0x20000 | 16), DataType::Unknown(0x20000 | 16));
+        assert_eq!(
+            DataType::from_ffi(0x20000 | 16),
+            DataType::Unknown(0x20000 | 16)
+        );
         assert_eq!(DataType::Unknown(5).as_ffi(), 5);
         assert_eq!(DataType::from_ffi(1 << 40), DataType::Unknown(1 << 40));
     }
@@ -1134,7 +1163,13 @@ mod tests {
     #[test]
     fn strided_scatter_leaves_padding_untouched() {
         let mut storage = f32_bytes(&[-1.0; 8]);
-        scatter(&mut storage, &[2, 3], &[5, 1], &[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        scatter(
+            &mut storage,
+            &[2, 3],
+            &[5, 1],
+            &[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0],
+        )
+        .unwrap();
         let values: Vec<f32> = gather(&storage, &[8], &[1]).unwrap();
         assert_eq!(values, [1.0, 2.0, 3.0, -1.0, -1.0, 4.0, 5.0, 6.0]);
     }
@@ -1212,7 +1247,7 @@ mod tests {
         assert_eq!(typed_slice::<f32>(storage).unwrap(), &[1.0, 2.0, 3.0]);
         let misaligned = &storage[1..];
         assert!(typed_slice::<f32>(misaligned).is_err());
-        assert!(typed_slice::<f32>(&[]).unwrap().is_empty());
+        assert_eq!(typed_slice::<f32>(&[]).unwrap().len(), 0);
     }
 
     #[test]

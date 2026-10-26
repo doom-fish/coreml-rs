@@ -72,7 +72,7 @@ fn main() {
         "--package-path".into(),
         swift_dir.into(),
         "--scratch-path".into(),
-        swift_build_dir.clone(),
+        swift_build_dir,
     ];
 
     if sdk_at_least(sdk_version, 14, 0) {
