@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-02
+
 ### Fixed
 
 - `Model::load_async`, `ModelCompiler::compile`, `ModelCompiler::compile_async`, `ComputePlan::load_from_url`, `ComputePlan::load_details_from_url`, `ComputePlanDetails::load_from_url` and `ModelStructure::load_from_url` return an error when CoreML gives neither a result nor an error. Before this change, the Swift wrappers of CoreML stopped the process with a trap. The Swift bridge now calls the Objective-C completion-handler forms. The compute-plan and model-structure JSON does not change.
