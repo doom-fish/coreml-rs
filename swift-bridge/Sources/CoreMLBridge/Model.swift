@@ -106,7 +106,18 @@ public func cm_model_load_from_specification(
     let asset = try MLModelAsset(specification: data)
     let configuration = try cm_make_configuration(from: configurationJson)
     switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
-      try await MLModel.load(asset: asset, configuration: configuration)
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<MLModel, Error>) in
+        MLModel.load(asset, configuration: configuration) { model, error in
+          if let error {
+            continuation.resume(throwing: error)
+          } else if let model {
+            continuation.resume(returning: model)
+          } else {
+            continuation.resume(
+              throwing: CMBridgeError.operationFailed("CoreML returned neither a result nor an error"))
+          }
+        }
+      }
     }) {
     case .success(let model):
       outModel.pointee = cm_retain(model)
