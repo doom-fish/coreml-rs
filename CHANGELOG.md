@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-02
+
 ### Fixed
 
 - `Model::load_from_specification_data` now returns an error when CoreML completes the model load with neither a model nor an error. Before, the process stopped. The Swift bridge now calls the completion-handler form of `MLModel.load(_:configuration:completionHandler:)`.
