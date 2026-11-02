@@ -73,7 +73,9 @@ public func cm_model_load_async(
     let task = Task {
       do {
         try Task.checkCancellation()
-        let model = try await MLModel.load(contentsOf: url, configuration: configuration)
+        let model = try await cm_await_completion {
+          MLModel.__loadContents(of: url, configuration: configuration, completionHandler: $0)
+        }
         box.succeed(cm_retain(model))
       } catch {
         box.fail(error: error, fallback: CM_MODEL_LOAD_FAILED)
@@ -106,17 +108,8 @@ public func cm_model_load_from_specification(
     let asset = try MLModelAsset(specification: data)
     let configuration = try cm_make_configuration(from: configurationJson)
     switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
-      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<MLModel, Error>) in
-        MLModel.load(asset, configuration: configuration) { model, error in
-          if let error {
-            continuation.resume(throwing: error)
-          } else if let model {
-            continuation.resume(returning: model)
-          } else {
-            continuation.resume(
-              throwing: CMBridgeError.operationFailed("CoreML returned neither a result nor an error"))
-          }
-        }
+      try await cm_await_completion {
+        MLModel.load(asset, configuration: configuration, completionHandler: $0)
       }
     }) {
     case .success(let model):

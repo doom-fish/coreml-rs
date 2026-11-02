@@ -4,21 +4,21 @@ import Foundation
 #if COREML_HAS_MACOS14_4_SDK
   @available(macOS 14.4, *)
   func cm_model_structure_program_value_type_object(
-    _ valueType: MLModelStructure.Program.ValueType
+    _: __MLModelStructureProgramValueType
   ) -> [String: Any] {
-    ["description": String(describing: valueType)]
+    ["description": "ValueType()"]
   }
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_value_object(
-    _ value: MLModelStructure.Program.Value
+    _: __MLModelStructureProgramValue
   ) -> [String: Any] {
-    ["description": String(describing: value)]
+    ["description": "Value()"]
   }
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_named_value_type_object(
-    _ namedValueType: MLModelStructure.Program.NamedValueType
+    _ namedValueType: __MLModelStructureProgramNamedValueType
   ) -> [String: Any] {
     [
       "name": namedValueType.name,
@@ -28,23 +28,17 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_binding_object(
-    _ binding: MLModelStructure.Program.Binding
+    _ binding: __MLModelStructureProgramBinding
   ) -> [String: Any] {
-    switch binding {
-    case .value(let value):
+    if let value = binding.value {
       return ["value": cm_model_structure_program_value_object(value)]
-    case .name(let name):
-      return ["name": name]
-    @unknown default:
-      return [
-        "value": ["description": "unknown"]
-      ]
     }
+    return ["name": binding.name ?? ""]
   }
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_argument_object(
-    _ argument: MLModelStructure.Program.Argument
+    _ argument: __MLModelStructureProgramArgument
   ) -> [String: Any] {
     [
       "bindings": argument.bindings.map(cm_model_structure_program_binding_object)
@@ -53,7 +47,7 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_operation_object(
-    _ operation: MLModelStructure.Program.Operation
+    _ operation: __MLModelStructureProgramOperation
   ) -> [String: Any] {
     [
       "operator_name": operation.operatorName,
@@ -65,7 +59,7 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_block_object(
-    _ block: MLModelStructure.Program.Block
+    _ block: __MLModelStructureProgramBlock
   ) -> [String: Any] {
     [
       "inputs": block.inputs.map(cm_model_structure_program_named_value_type_object),
@@ -76,7 +70,7 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_model_structure_program_function_object(
-    _ function: MLModelStructure.Program.Function
+    _ function: __MLModelStructureProgramFunction
   ) -> [String: Any] {
     [
       "inputs": function.inputs.map(cm_model_structure_program_named_value_type_object),
@@ -85,7 +79,7 @@ import Foundation
   }
 
   @available(macOS 14.4, *)
-  func cm_model_structure_program_object(_ program: MLModelStructure.Program) -> [String: Any] {
+  func cm_model_structure_program_object(_ program: __MLModelStructureProgram) -> [String: Any] {
     [
       "functions": program.functions.mapValues { cm_model_structure_program_function_object($0) }
     ]
@@ -93,7 +87,7 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_model_structure_neural_network_layer_object(
-    _ layer: MLModelStructure.NeuralNetwork.Layer
+    _ layer: __MLModelStructureNeuralNetworkLayer
   ) -> [String: Any] {
     [
       "name": layer.name,
@@ -105,7 +99,7 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_model_structure_neural_network_object(
-    _ neuralNetwork: MLModelStructure.NeuralNetwork
+    _ neuralNetwork: __MLModelStructureNeuralNetwork
   ) -> [String: Any] {
     [
       "layers": neuralNetwork.layers.map(cm_model_structure_neural_network_layer_object)
@@ -113,7 +107,7 @@ import Foundation
   }
 
   @available(macOS 14.4, *)
-  func cm_model_structure_pipeline_object(_ pipeline: MLModelStructure.Pipeline) -> [String: Any] {
+  func cm_model_structure_pipeline_object(_ pipeline: __MLModelStructurePipeline) -> [String: Any] {
     [
       "sub_model_names": pipeline.subModelNames,
       "sub_models": pipeline.subModels.map(cm_model_structure_object),
@@ -121,28 +115,26 @@ import Foundation
   }
 
   @available(macOS 14.4, *)
-  func cm_model_structure_object(_ structure: MLModelStructure) -> [String: Any] {
-    switch structure {
-    case .neuralNetwork(let neuralNetwork):
+  func cm_model_structure_object(_ structure: __MLModelStructure) -> [String: Any] {
+    if let neuralNetwork = structure.neuralNetwork {
       return [
         "kind": "neural_network",
         "neural_network": cm_model_structure_neural_network_object(neuralNetwork),
       ]
-    case .program(let program):
+    }
+    if let program = structure.program {
       return [
         "kind": "program",
         "program": cm_model_structure_program_object(program),
       ]
-    case .pipeline(let pipeline):
+    }
+    if let pipeline = structure.pipeline {
       return [
         "kind": "pipeline",
         "pipeline": cm_model_structure_pipeline_object(pipeline),
       ]
-    case .unsupported:
-      return ["kind": "unsupported"]
-    @unknown default:
-      return ["kind": "unsupported"]
     }
+    return ["kind": "unsupported"]
   }
 
   @_cdecl("cm_model_structure_load_json")
@@ -160,7 +152,7 @@ import Foundation
     if #available(macOS 14.4, *) {
       let url = cm_url(from: pathPtr)
       switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
-        try await MLModelStructure.load(contentsOf: url)
+        try await cm_await_completion { __MLModelStructure.loadContents(of: url, completionHandler: $0) }
       }) {
       case .success(let structure):
         outJson.pointee = cm_string(cm_json_string(cm_model_structure_object(structure)))

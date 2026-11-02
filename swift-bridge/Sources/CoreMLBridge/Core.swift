@@ -190,6 +190,23 @@ func cm_block_on_async<T>(
         ?? .failure(CMBridgeError.operationFailed("CoreML async work produced no result"))
 }
 
+func cm_await_completion<T>(
+    _ start: (@escaping @Sendable (T?, Error?) -> Void) -> Void
+) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        start { value, error in
+            if let error {
+                continuation.resume(throwing: error)
+            } else if let value {
+                continuation.resume(returning: value)
+            } else {
+                continuation.resume(
+                    throwing: CMBridgeError.operationFailed("CoreML returned neither a result nor an error"))
+            }
+        }
+    }
+}
+
 func cm_json_object(from jsonPtr: UnsafePointer<CChar>?) throws -> [String: Any] {
     guard let jsonPtr else { return [:] }
     let json = String(cString: jsonPtr)

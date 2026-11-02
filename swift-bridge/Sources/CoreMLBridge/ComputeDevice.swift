@@ -30,6 +30,23 @@ import Foundation
   }
 
   @available(macOS 14.0, *)
+  func cm_compute_device_object(_ device: any MLComputeDeviceProtocol) -> [String: Any] {
+    switch device {
+    case let device as MLCPUComputeDevice:
+      return cm_compute_device_object(MLComputeDevice.cpu(device))
+    case let device as MLGPUComputeDevice:
+      return cm_compute_device_object(MLComputeDevice.gpu(device))
+    case let device as MLNeuralEngineComputeDevice:
+      return cm_compute_device_object(MLComputeDevice.neuralEngine(device))
+    default:
+      return [
+        "kind": "unknown",
+        "description": String(describing: device),
+      ]
+    }
+  }
+
+  @available(macOS 14.0, *)
   func cm_compute_devices_json(_ devices: [MLComputeDevice]) -> UnsafeMutablePointer<CChar>? {
     cm_string(cm_json_string(devices.map(cm_compute_device_object)))
   }

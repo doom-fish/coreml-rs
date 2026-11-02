@@ -47,7 +47,9 @@ public func cm_model_compile(
     switch cm_block_on_async(
         timeoutSeconds: timeoutSeconds,
         discard: { compiledURL in try? FileManager.default.removeItem(at: compiledURL) },
-        work: { try await MLModel.compileModel(at: sourceURL) }
+        work: {
+            try await cm_await_completion { MLModel.__compileModel(at: sourceURL, completionHandler: $0) }
+        }
     ) {
     case let .success(compiledURL):
         outCompiledPath.pointee = cm_string(compiledURL.path)
@@ -74,7 +76,9 @@ public func cm_model_compile_async(
     let task = Task {
         do {
             try Task.checkCancellation()
-            let compiledURL = try await MLModel.compileModel(at: sourceURL)
+            let compiledURL = try await cm_await_completion {
+                MLModel.__compileModel(at: sourceURL, completionHandler: $0)
+            }
             box.succeed(compiledURL.path)
         } catch {
             box.fail(error: error, fallback: CM_COMPILATION_FAILED)

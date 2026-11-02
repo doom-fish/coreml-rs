@@ -3,13 +3,13 @@ import Foundation
 
 #if COREML_HAS_MACOS14_4_SDK
   @available(macOS 14.4, *)
-  func cm_compute_plan_cost_object(_ cost: MLComputePlan.Cost) -> [String: Any] {
+  func cm_compute_plan_cost_object(_ cost: __MLComputePlanCost) -> [String: Any] {
     ["weight": cost.weight]
   }
 
   @available(macOS 14.4, *)
   func cm_compute_plan_device_usage_object(
-    _ usage: MLComputePlan.DeviceUsage
+    _ usage: __MLComputePlanDeviceUsage
   ) -> [String: Any] {
     [
       "supported": usage.supported.map { cm_compute_device_object($0) },
@@ -19,9 +19,9 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_collect_compute_plan_program_operation_plans(
-    _ block: MLModelStructure.Program.Block,
+    _ block: __MLModelStructureProgramBlock,
     path: String,
-    plan: MLComputePlan
+    plan: __MLComputePlan
   ) -> [[String: Any]] {
     var objects: [[String: Any]] = []
     for (index, operation) in block.operations.enumerated() {
@@ -30,10 +30,10 @@ import Foundation
         "path": operationPath,
         "operation": cm_model_structure_program_operation_object(operation),
       ]
-      if let cost = plan.estimatedCost(of: operation) {
+      if let cost = plan.cost(of: operation) {
         object["cost"] = cm_compute_plan_cost_object(cost)
       }
-      if let usage = plan.deviceUsage(for: operation) {
+      if let usage = plan.computeDeviceUsage(for: operation) {
         object["device_usage"] = cm_compute_plan_device_usage_object(usage)
       }
       objects.append(object)
@@ -53,8 +53,8 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_collect_compute_plan_program_operation_plans(
-    _ program: MLModelStructure.Program,
-    plan: MLComputePlan
+    _ program: __MLModelStructureProgram,
+    plan: __MLComputePlan
   ) -> [[String: Any]] {
     var objects: [[String: Any]] = []
     for functionName in program.functions.keys.sorted() {
@@ -72,15 +72,15 @@ import Foundation
 
   @available(macOS 14.4, *)
   func cm_collect_compute_plan_neural_network_layer_plans(
-    _ neuralNetwork: MLModelStructure.NeuralNetwork,
-    plan: MLComputePlan
+    _ neuralNetwork: __MLModelStructureNeuralNetwork,
+    plan: __MLComputePlan
   ) -> [[String: Any]] {
     neuralNetwork.layers.enumerated().map { index, layer in
       var object: [String: Any] = [
         "path": "layers[\(index)]",
         "layer": cm_model_structure_neural_network_layer_object(layer),
       ]
-      if let usage = plan.deviceUsage(for: layer) {
+      if let usage = plan.computeDeviceUsage(for: layer) {
         object["device_usage"] = cm_compute_plan_device_usage_object(usage)
       }
       return object
@@ -88,8 +88,9 @@ import Foundation
   }
 
   @available(macOS 14.4, *)
-  func cm_compute_plan_object(_ plan: MLComputePlan) -> [String: Any] {
-    let modelStructureObject = cm_model_structure_object(plan.modelStructure)
+  func cm_compute_plan_object(_ plan: __MLComputePlan) -> [String: Any] {
+    let modelStructure = plan.modelStructure
+    let modelStructureObject = cm_model_structure_object(modelStructure)
 
     let modelType: String
     let functionNames: [String]
@@ -98,15 +99,7 @@ import Foundation
     let layerCount: Int
     let pipelineModelCount: Int
 
-    switch plan.modelStructure {
-    case .program(let program):
-      modelType = "program"
-      functionNames = program.functions.keys.sorted()
-      programOperationPlans = cm_collect_compute_plan_program_operation_plans(program, plan: plan)
-      neuralNetworkLayerPlans = []
-      layerCount = 0
-      pipelineModelCount = 0
-    case .neuralNetwork(let neuralNetwork):
+    if let neuralNetwork = modelStructure.neuralNetwork {
       modelType = "neural_network"
       functionNames = []
       programOperationPlans = []
@@ -116,21 +109,21 @@ import Foundation
       )
       layerCount = neuralNetwork.layers.count
       pipelineModelCount = 0
-    case .pipeline(let pipeline):
+    } else if let program = modelStructure.program {
+      modelType = "program"
+      functionNames = program.functions.keys.sorted()
+      programOperationPlans = cm_collect_compute_plan_program_operation_plans(program, plan: plan)
+      neuralNetworkLayerPlans = []
+      layerCount = 0
+      pipelineModelCount = 0
+    } else if let pipeline = modelStructure.pipeline {
       modelType = "pipeline"
       functionNames = []
       programOperationPlans = []
       neuralNetworkLayerPlans = []
       layerCount = 0
       pipelineModelCount = pipeline.subModels.count
-    case .unsupported:
-      modelType = "unknown"
-      functionNames = []
-      programOperationPlans = []
-      neuralNetworkLayerPlans = []
-      layerCount = 0
-      pipelineModelCount = 0
-    @unknown default:
+    } else {
       modelType = "unknown"
       functionNames = []
       programOperationPlans = []
@@ -169,7 +162,9 @@ import Foundation
         let configuration = try cm_make_configuration(from: configurationJson)
         let url = cm_url(from: pathPtr)
         switch cm_block_on_async(timeoutSeconds: timeoutSeconds, work: {
-          try await MLComputePlan.load(contentsOf: url, configuration: configuration)
+          try await cm_await_completion {
+            __MLComputePlan.loadContents(of: url, configuration: configuration, completionHandler: $0)
+          }
         }) {
         case .success(let plan):
           outSummaryJson.pointee = cm_string(cm_json_string(cm_compute_plan_object(plan)))
